@@ -1,4 +1,3 @@
-const fs = require('fs/promises');
 const os = require('os');
 const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
