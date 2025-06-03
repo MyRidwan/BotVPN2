@@ -44,16 +44,25 @@ const {
   renewshadowsocks 
 } = require('./modules/renew');
 
+const { 
+  triallssh, 
+  triallvmess, 
+  triallvless, 
+  trialltrojan, 
+  triallshadowsocks 
+} = require('./modules/triall');
+
 const fs = require('fs');
 const vars = JSON.parse(fs.readFileSync('./.vars.json', 'utf8'));
 
 const BOT_TOKEN = vars.BOT_TOKEN;
 const port = vars.PORT || 50123;
 const ADMIN = vars.USER_ID; 
-const NAMA_STORE = vars.NAMA_STORE || '@Regersays';
+const NAMA_STORE = vars.NAMA_STORE || '@regersays';
 const DATA_QRIS = vars.DATA_QRIS;
 const MERCHANT_ID = vars.MERCHANT_ID;
 const API_KEY = vars.API_KEY;
+const GROUP_CHAT_ID = vars.GROUP_CHAT_ID; // Ambil ID grup chat
 
 const bot = new Telegraf(BOT_TOKEN);
 const adminIds = ADMIN;
@@ -66,6 +75,26 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
     logger.info('Terhubung ke SQLite3');
   }
 });
+// Fungsi untuk mengirim notifikasi transaksi ke grup
+async function sendTransactionNotification(userId, transactionType, type, exp, totalHarga) {
+    const message = `
+✨ <b>Notifikasi Transaksi Order</b> ✨
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+👤 User ID: <b>${userId}</b>
+💳 Tipe Transaksi: <b>${transactionType}</b>
+📅 Tipe Akun: <b>${type}</b>
+🚀 Masa Aktif Akun: <b>${exp} Hari</b>
+💰 Harga Akun: <b>Rp.-${totalHarga}</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+Terima kasih telah menggunakan layanan kami!`;
+
+    try {
+        await bot.telegram.sendMessage(GROUP_CHAT_ID, message, { parse_mode: 'HTML' });
+        logger.info(`Notifikasi dikirim untuk ${transactionType} untuk user ${userId}`);
+    } catch (error) {
+        logger.error(`Gagal mengirim notifikasi: ${error.message}`);
+    }
+}
 
 db.run(`CREATE TABLE IF NOT EXISTS pending_deposits (
   unique_code TEXT PRIMARY KEY,
@@ -81,6 +110,8 @@ db.run(`CREATE TABLE IF NOT EXISTS pending_deposits (
   }
 });
 
+// Endpoint untuk aksi membuat akun
+// Membuat tabel Server jika belum ada
 db.run(`CREATE TABLE IF NOT EXISTS Server (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   domain TEXT,
@@ -95,7 +126,36 @@ db.run(`CREATE TABLE IF NOT EXISTS Server (
   if (err) {
     logger.error('Kesalahan membuat tabel Server:', err.message);
   } else {
-    logger.info('Server table created or already exists');
+    logger.info('Tabel Server telah berhasil dibuat atau sudah ada');
+  }
+});
+
+// Membuat tabel TrialAccounts untuk menyimpan akun trial yang dibuat
+db.run(`CREATE TABLE IF NOT EXISTS TrialAccounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  username TEXT NOT NULL,
+  date DATE NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+)`, (err) => {
+  if (err) {
+    logger.error('Kesalahan membuat tabel TrialAccounts:', err.message);
+  } else {
+    logger.info('Tabel TrialAccounts telah berhasil dibuat atau sudah ada');
+  }
+});
+
+// Membuat tabel TrialLimits untuk menyimpan batas pembuatan akun trial
+db.run(`CREATE TABLE IF NOT EXISTS TrialLimits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  max_trial_per_day INTEGER DEFAULT 2,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+)`, (err) => {
+  if (err) {
+    logger.error('Kesalahan membuat tabel TrialLimits:', err.message);
+  } else {
+    logger.info('Tabel TrialLimits telah berhasil dibuat atau sudah ada');
   }
 });
 
@@ -116,8 +176,16 @@ const userState = {};
 logger.info('User state initialized');
 
 bot.command(['start', 'menu'], async (ctx) => {
+  try {
+    console.log('Menghapus pesan menu sebelumnya...');
+    await ctx.deleteMessage();
+    console.log('Pesan berhasil dihapus.');
+  } catch (deleteError) {
+    console.warn('Tidak dapat menghapus pesan:', deleteError.message);
+  }
+
   logger.info('Start or Menu command received');
-  
+
   const userId = ctx.from.id;
   db.get('SELECT * FROM users WHERE user_id = ?', [userId], (err, row) => {
     if (err) {
@@ -142,84 +210,133 @@ bot.command(['start', 'menu'], async (ctx) => {
 });
 
 bot.command('admin', async (ctx) => {
+  try {
+    console.log('Menghapus pesan admin sebelumnya...');
+    await ctx.deleteMessage();
+    console.log('Pesan berhasil dihapus.');
+  } catch (deleteError) {
+    console.warn('Tidak dapat menghapus pesan:', deleteError.message);
+  }
+
   logger.info('Admin menu requested');
-  
+
   if (!adminIds.includes(ctx.from.id)) {
     await ctx.reply('🚫 Anda tidak memiliki izin untuk mengakses menu admin.');
     return;
   }
-
+  
   await sendAdminMenu(ctx);
 });
+
 async function sendMainMenu(ctx) {
+  try {
+    console.log('Menghapus pesan menu utama sebelumnya...');
+    await ctx.deleteMessage();
+    console.log('Pesan berhasil dihapus.');
+  } catch (deleteError) {
+    console.warn('Tidak dapat menghapus pesan:', deleteError.message);
+  }
+
   const keyboard = [
     [
       { text: '➕ Buat Akun', callback_data: 'service_create' },
       { text: '♻️ Perpanjang Akun', callback_data: 'service_renew' }
     ],
     [
-      { text: '💰 TopUp Saldo', callback_data: 'topup_saldo' },
-      { text: '💳 Cek Saldo', callback_data: 'cek_saldo' }
+      { text: '🍁 Triall Akun', callback_data: 'service_triall' }, 
+      { text: '💰 TopUp Saldo', callback_data: 'topup_saldo' }
+    ], 
+    [
+      { text: '🚀 Saluran Wa', url: 'https://saluran.myrid.my.id' }
     ],
   ];
 
   const uptime = os.uptime();
   const days = Math.floor(uptime / (60 * 60 * 24));
-  
   let jumlahServer = 0;
-  try {
-    const row = await new Promise((resolve, reject) => {
-      db.get('SELECT COUNT(*) AS count FROM Server', (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
-    });
-    jumlahServer = row.count;
-  } catch (err) {
-    logger.error('Kesalahan saat mengambil jumlah server:', err.message);
-  }
   let jumlahPengguna = 0;
+  let saldo = 0;
+
   try {
-    const row = await new Promise((resolve, reject) => {
-      db.get('SELECT COUNT(*) AS count FROM users', (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
+    // Hitung jumlah server
+    jumlahServer = await new Promise((resolve, reject) => {
+      db.get('SELECT COUNT(*) AS count FROM Server', (err, row) => {
+        if (err) reject(err);
+        else resolve(row ? row.count : 0);
       });
     });
-    jumlahPengguna = row.count;
+
+    // Hitung jumlah pengguna
+    jumlahPengguna = await new Promise((resolve, reject) => {
+      db.get('SELECT COUNT(*) AS count FROM users', (err, row) => {
+        if (err) reject(err);
+        else resolve(row ? row.count : 0);
+      });
+    });
+
+    // Dapatkan saldo pengguna
+    const userId = ctx.from.id;
+    saldo = await new Promise((resolve, reject) => {
+      db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], (err, row) => {
+        if (err) {
+          logger.error('❌ Kesalahan saat memeriksa saldo:', err.message);
+          return reject('❌ *Terjadi kesalahan saat memeriksa saldo Anda. Silakan coba lagi nanti.*');
+        }
+        resolve(row ? row.saldo : 0);
+      });
+    });
+
   } catch (err) {
-    logger.error('Kesalahan saat mengambil jumlah pengguna:', err.message);
+    logger.error('Kesalahan saat mengambil data:', err.message);
   }
 
-  const messageText = `*Selamat datang di ${NAMA_STORE},\nMENU BOT ADMIN* 🚀\n__Bot VPN serba otomatis untuk membeli\nlayanan VPN dengan mudah dan cepat__\n\n🪪 *Tele:* @Regersays\n🍀 *Wa:* 087861710128\n\n⏳ *Uptime bot:* ${days} Hari\n🌐 *Server tersedia:* ${jumlahServer}\n👥 *Jumlah pengguna:* ${jumlahPengguna}\n\n*Silakan pilih opsi layanan:*`;
+  const userId = ctx.from.id;
+  const messageText = `
+🛡️ *${NAMA_STORE} - VPN PREMIUM SERVICE* 🛡️
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 *Status Bot*
+
+🕒 Aktif Selama : *${days} hari*
+🌐 Server Tersedia : *${jumlahServer}*
+👥 Pengguna Terdaftar : *${jumlahPengguna}*
+💳 Saldo Kamu : *${saldo}*
+👤 User ID : *${userId}*
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔥 *LAYANAN KAMI:*
+• SSH & OpenVPN (Support Semua Operator)
+• XRAY: VMess / VLESS (TLS & Non-TLS)
+• Trojan WS & GFW (Stabil & Cepat)
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📌 *FITUR UNGGULAN:*
+✅ Full Speed & Low Ping
+✅ Support Bug Host / SNI
+✅ Masa Aktif Fleksibel
+✅ Kuota & Limit IP Custom
+✅ Auto Deploy Akun 24 Jam
+✅ Support Wildcard
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+💬 *Silakan pilih menu di bawah untuk order.*
+🔰 *Layanan cocok untuk Streaming & Browsing!*
+📞 Butuh bantuan? Hubungi [ADMIN](t.me/regersays)
+`;
 
   try {
-    if (ctx.updateType === 'callback_query') {
-      await ctx.editMessageText(messageText, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: keyboard
-        }
-      });
-    } else {
-      await ctx.reply(messageText, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: keyboard
-        }
-      });
-    }
+    await ctx.reply(messageText, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: keyboard
+      }
+    });
     logger.info('Main menu sent');
   } catch (error) {
     logger.error('Error saat mengirim menu utama:', error);
   }
 }
+
+// Tambahkan efek menghapus pada menu lain juga seperti sendAdminMenu, handleServiceAction, dll. Secara khusus, di setiap action untuk setiap fungsi yang ada.
+
+
+
 
 bot.command('hapuslog', async (ctx) => {
   if (!adminIds.includes(ctx.from.id)) return ctx.reply('Tidak ada izin!');
@@ -235,6 +352,8 @@ bot.command('hapuslog', async (ctx) => {
 });
 
 bot.command('helpadmin', async (ctx) => {
+
+  
   const userId = ctx.message.from.id;
   if (!adminIds.includes(userId)) {
       return ctx.reply('⚠️ Anda tidak memiliki izin untuk menggunakan perintah ini.', { parse_mode: 'Markdown' });
@@ -341,6 +460,111 @@ bot.command('addsaldo', async (ctx) => {
       });
   });
 });
+//case register
+//Aksi untuk registrasi IP
+bot.action('register_ip', async (ctx) => {
+    const userId = ctx.from.id;
+    db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], async (err, row) => {
+        if (err) {
+            logger.error('Kesalahan saat memeriksa saldo:', err.message);
+            return;
+        }
+
+        if (!row || row.saldo <= 0) {
+            await ctx.reply('🚫 Anda tidak memiliki cukup saldo untuk mendaftar IP. Silakan top up saldo Anda.');
+            return;
+        }
+
+        // Menyediakan opsi durasi registrasi dan harga
+        const options = [
+            { duration: '30 hari', price: 15000 },
+            { duration: '60 hari', price: 25000 },
+            { duration: '90 hari', price: 35000 },
+            { duration: '120 hari', price: 45000 },
+        ];
+
+        // Membuat tombol untuk setiap opsi
+        const buttons = options.map((option, index) => {
+            return [Markup.button.callback(`${option.duration} - ${option.price} saldo`, `select_duration_${index}`)];
+        });
+
+        // Mengirim pesan dengan tombol
+        await ctx.reply('🔄 Pilih durasi registrasi IP:', Markup.inlineKeyboard(buttons));
+    });
+});
+
+// Fungsi untuk menangani pemilihan durasi
+bot.action(/select_duration_(\d+)/, async (ctx) => {
+    const userId = ctx.from.id;
+    const index = parseInt(ctx.match[1]);
+    const options = [
+        { duration: '30 hari', price: 15000 },
+        { duration: '60 hari', price: 25000 },
+        { duration: '90 hari', price: 35000 },
+        { duration: '120 hari', price: 45000 },
+    ];
+    const selectedOption = options[index];
+    const hargaRegistrasi = selectedOption.price;
+
+    // Mendapatkan saldo pengguna
+    db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], async (err, row) => {
+        if (err) {
+            logger.error('Kesalahan saat memeriksa saldo:', err.message);
+            return;
+        }
+
+        if (row.saldo < hargaRegistrasi) {
+            await ctx.reply('🚫 Anda tidak memiliki cukup saldo untuk mendaftar IP. Saldo Anda tidak mencukupi.');
+            return;
+        }
+
+        // Minta pengguna memasukkan IP yang ingin didaftarkan
+        await ctx.reply('🔄 Masukkan IP yang ingin didaftarkan:');
+
+        // Atur listener untuk menerima IP
+        bot.on('text', async (ipCtx) => {
+            await handleRegisterIp(ipCtx, userId, hargaRegistrasi, selectedOption.duration);
+        });
+    });
+});
+
+// Fungsi untuk menangani registrasi IP
+async function handleRegisterIp(msg, userId, hargaRegistrasi, duration) {
+    const ip = msg.text.trim();
+    if (!ip) {
+        await bot.sendMessage(userId, '⚠️ IP tidak valid. Silakan masukkan IP yang valid.');
+        return;
+    }
+
+    const saldo = await getUserBalance(userId);
+
+    if (saldo < hargaRegistrasi) {
+        await bot.sendMessage(userId, '🚫 Anda tidak memiliki cukup saldo untuk mendaftar IP. Saldo Anda tidak mencukupi.');
+        return;
+    }
+
+    // Jika memiliki saldo cukup, kurangi saldo dan lakukan pendaftaran IP
+    db.run('UPDATE users SET saldo = saldo - ? WHERE user_id = ?', [hargaRegistrasi, userId], async (err) => {
+        if (err) {
+            logger.error('Kesalahan saat mengurangi saldo:', err.message);
+            await bot.sendMessage(userId, '❌ Terjadi kesalahan saat memproses pendaftaran IP.');
+        } else {
+            // Proses skrip registrasi IP dengan tambahan parameter durasi
+            exec(`bash xwanregis.sh ${ip} ${userId} ${duration.split(' ')[0]}`, (error, stdout, stderr) => {
+                if (error) {
+                    bot.sendMessage(userId, `🚨 Terjadi kesalahan:\n${error.message}`);
+                } else {
+                    bot.sendMessage(userId, `✅ IP berhasil didaftarkan!\nOutput:\n${stdout}`);
+                }
+            });
+        }
+    });
+}
+//comingsoon
+
+//case trial
+
+
 bot.command('addserver', async (ctx) => {
   const userId = ctx.message.from.id;
   if (!adminIds.includes(userId)) {
@@ -619,6 +843,13 @@ async function handleServiceAction(ctx, action) {
       [{ text: 'Perpanjang Trojan', callback_data: 'renew_trojan' }, { text: 'Perpanjang Shadowsocks', callback_data: 'renew_shadowsocks' }],
       [{ text: '🔙 Kembali', callback_data: 'send_main_menu' }]
     ];
+    } else if (action === 'triall') {
+    keyboard = [
+      [{ text: 'Triall Ssh/Ovpn', callback_data: 'triall_ssh' }],
+      [{ text: 'Triall Vmess', callback_data: 'triall_vmess' }, { text: 'Triall Vless', callback_data: 'renew_vless' }],
+      [{ text: 'Triall Trojan', callback_data: 'triall_trojan' }, { text: 'Triall Shadowsocks', callback_data: 'triall_shadowsocks' }],
+      [{ text: '🔙 Kembali', callback_data: 'send_main_menu' }]
+    ];
   }
   try {
     await ctx.editMessageReplyMarkup({
@@ -706,6 +937,13 @@ bot.action('service_renew', async (ctx) => {
   await handleServiceAction(ctx, 'renew');
 });
 
+bot.action('service_triall', async (ctx) => {
+  if (!ctx || !ctx.match) {
+    return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi nanti.', { parse_mode: 'Markdown' });
+  }
+  await handleServiceAction(ctx, 'triall');
+});
+
 bot.action('send_main_menu', async (ctx) => {
   if (!ctx || !ctx.match) {
     return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi nanti.', { parse_mode: 'Markdown' });
@@ -782,6 +1020,42 @@ bot.action('renew_ssh', async (ctx) => {
   }
   await startSelectServer(ctx, 'renew', 'ssh');
 });
+
+bot.action('triall_vmess', async (ctx) => {
+  if (!ctx || !ctx.match) {
+    return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi nanti.', { parse_mode: 'Markdown' });
+  }
+  await startSelectServer(ctx, 'triall', 'vmess');
+});
+
+bot.action('triall_vless', async (ctx) => {
+  if (!ctx || !ctx.match) {
+    return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi nanti.', { parse_mode: 'Markdown' });
+  }
+  await startSelectServer(ctx, 'triall', 'vless');
+});
+
+bot.action('triall_trojan', async (ctx) => {
+  if (!ctx || !ctx.match) {
+    return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi nanti.', { parse_mode: 'Markdown' });
+  }
+  await startSelectServer(ctx, 'triall', 'trojan');
+});
+
+bot.action('triall_shadowsocks', async (ctx) => {
+  if (!ctx || !ctx.match) {
+    return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi nanti.', { parse_mode: 'Markdown' });
+  }
+  await startSelectServer(ctx, 'triall', 'shadowsocks');
+});
+
+bot.action('triall_ssh', async (ctx) => {
+  if (!ctx || !ctx.match) {
+    return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi nanti.', { parse_mode: 'Markdown' });
+  }
+  await startSelectServer(ctx, 'triall', 'ssh');
+});
+
 async function startSelectServer(ctx, action, type, page = 0) {
   try {
     logger.info(`Memulai proses ${action} untuk ${type} di halaman ${page + 1}`);
@@ -867,22 +1141,30 @@ async function startSelectServer(ctx, action, type, page = 0) {
   }
 }
 
-bot.action(/navigate_(\w+)_(\w+)_(\d+)/, async (ctx) => {
-  const [, action, type, page] = ctx.match;
-  await startSelectServer(ctx, action, type, parseInt(page, 10));
-});
-bot.action(/(create|renew)_username_(vmess|vless|trojan|shadowsocks|ssh)_(.+)/, async (ctx) => {
+
+const crypto = require('crypto');
+
+// Fungsi untuk menghasilkan password acak
+function generateRandomPassword(length = 12) {
+  return crypto.randomBytes(length).toString('hex').slice(0, length);
+}
+
+const { promisify } = require('util');
+
+// Mengubah db.get menjadi promise-based
+const getAsync = promisify(db.get).bind(db);
+
+// Endpoint untuk aksi membuat akun
+bot.action(/(create|renew|triall)_username_(vmess|vless|trojan|shadowsocks|ssh)_(.+)/, async (ctx) => {
   const action = ctx.match[1];
   const type = ctx.match[2];
   const serverId = ctx.match[3];
+
   userState[ctx.chat.id] = { step: `username_${action}_${type}`, serverId, type, action };
 
-  db.get('SELECT batas_create_akun, total_create_akun FROM Server WHERE id = ?', [serverId], async (err, server) => {
-    if (err) {
-      logger.error('⚠️ Error fetching server details:', err.message);
-      return ctx.reply('❌ *Terjadi kesalahan saat mengambil detail server.*', { parse_mode: 'Markdown' });
-    }
-
+  try {
+    const server = await getAsync('SELECT batas_create_akun, total_create_akun FROM Server WHERE id = ?', [serverId]);
+    
     if (!server) {
       return ctx.reply('❌ *Server tidak ditemukan.*', { parse_mode: 'Markdown' });
     }
@@ -890,17 +1172,40 @@ bot.action(/(create|renew)_username_(vmess|vless|trojan|shadowsocks|ssh)_(.+)/, 
     const batasCreateAkun = server.batas_create_akun;
     const totalCreateAkun = server.total_create_akun;
 
-    if (totalCreateAkun >= batasCreateAkun) {
+    if (totalCreateAkun >= batasCreateAkun && action !== 'triall') {
       return ctx.reply('❌ *Server penuh. Tidak dapat membuat akun baru di server ini.*', { parse_mode: 'Markdown' });
     }
 
-    await ctx.reply('👤 *Masukkan username:*', { parse_mode: 'Markdown' });
-  });
+    if (action === 'triall') {
+      const today = new Date().toISOString().slice(0, 10); // Ambil tanggal hari ini
+
+      const row = await getAsync('SELECT COUNT(*) AS total_trial_from_user FROM TrialAccounts WHERE user_id = ? AND date = ?', [ctx.from.id, today]);
+
+      const limitRow = await getAsync('SELECT max_trial_per_day FROM TrialLimits WHERE user_id = ?', [ctx.from.id]);
+      
+      const maxTrialPerDay = limitRow ? limitRow.max_trial_per_day : 2; // Default ke 2 jika tidak ada
+      
+      if (row.total_trial_from_user >= maxTrialPerDay) {
+        return ctx.reply(`❌ *Anda sudah mencapai batas maksimum ${maxTrialPerDay} akun trial untuk hari ini.*`, { parse_mode: 'Markdown' });
+      }
+      
+      await ctx.reply('👤 *Masukkan username:*', { parse_mode: 'Markdown' });
+      
+    } else {
+      await ctx.reply('👤 *Masukkan username:*', { parse_mode: 'Markdown' });
+    }
+  } catch (err) {
+    logger.error('⚠️ Error:', err.message);
+    return ctx.reply('❌ *Terjadi kesalahan saat memproses permintaan.*', { parse_mode: 'Markdown' });
+  }
 });
+
+
+// Event untuk menangkap teks yang dikirim pengguna
 bot.on('text', async (ctx) => {
   const state = userState[ctx.chat.id];
 
-  if (!state) return; 
+  if (!state) return;
 
   if (state.step.startsWith('username_')) {
     state.username = ctx.message.text.trim();
@@ -914,6 +1219,51 @@ bot.on('text', async (ctx) => {
       return ctx.reply('❌ *Username tidak boleh mengandung karakter khusus atau spasi.*', { parse_mode: 'Markdown' });
     }
     const { username, serverId, type, action } = state;
+
+    if (action === 'triall') {
+      const serverDetails = await new Promise((resolve, reject) => {
+        db.get('SELECT quota, iplimit FROM Server WHERE id = ?', [serverId], (err, server) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(server);
+        });
+      });
+
+      if (!serverDetails) {
+        return ctx.reply('❌ *Server tidak ditemukan.*', { parse_mode: 'Markdown' });
+      }
+
+      const { quota, iplimit } = serverDetails;
+      let msg;
+
+      // Menggunakan fungsi trial sesuai jenis
+      if (type === 'vmess') {
+        msg = await triallvmess(username, 1, quota, iplimit, serverId);
+      } else if (type === 'vless') {
+        msg = await triallvless(username, 1, quota, iplimit, serverId);
+      } else if (type === 'trojan') {
+        msg = await trialltrojan(username, 1, quota, iplimit, serverId);
+      } else if (type === 'shadowsocks') {
+        msg = await triallshadowsocks(username, 1, quota, iplimit, serverId);
+      } else if (type === 'ssh') {
+        msg = await triallssh(username, 1, 1, iplimit, serverId);
+      }
+
+      // Simpan akun trial ke dalam database
+      const today = new Date().toISOString().slice(0, 10);
+      db.run('INSERT INTO TrialAccounts (user_id, username, date) VALUES (?, ?, ?)', [ctx.from.id, username, today], (err) => {
+        if (err) {
+          logger.error('⚠️ Error saving trial account:', err.message);
+          return ctx.reply('❌ *Terjadi kesalahan saat menyimpan akun trial.*', { parse_mode: 'Markdown' });
+        }
+      });
+
+      await ctx.reply(msg, { parse_mode: 'Markdown' });
+      delete userState[ctx.chat.id];
+      return;
+    }
+
     if (action === 'create') {
       if (type === 'ssh') {
         state.step = `password_${state.action}_${state.type}`;
@@ -980,7 +1330,7 @@ bot.on('text', async (ctx) => {
         }
 
         const harga = server.harga;
-        const totalHarga = harga * state.exp; 
+        const totalHarga = harga * state.exp;
 
         db.get('SELECT saldo FROM users WHERE user_id = ?', [ctx.from.id], async (err, user) => {
           if (err) {
@@ -1000,26 +1350,36 @@ bot.on('text', async (ctx) => {
           if (action === 'create') {
             if (type === 'vmess') {
               msg = await createvmess(username, exp, quota, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Create Akun', type, exp, totalHarga);
             } else if (type === 'vless') {
               msg = await createvless(username, exp, quota, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Create Akun', type, exp, totalHarga);
             } else if (type === 'trojan') {
               msg = await createtrojan(username, exp, quota, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Create Akun', type, exp, totalHarga);
             } else if (type === 'shadowsocks') {
               msg = await createshadowsocks(username, exp, quota, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Create Akun', type, exp, totalHarga);
             } else if (type === 'ssh') {
               msg = await createssh(username, password, exp, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Create Akun', type, exp, totalHarga);
             }
           } else if (action === 'renew') {
             if (type === 'vmess') {
               msg = await renewvmess(username, exp, quota, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Renew Akun', type, exp, totalHarga);;
             } else if (type === 'vless') {
               msg = await renewvless(username, exp, quota, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Renew Akun', type, exp, totalHarga);;
             } else if (type === 'trojan') {
               msg = await renewtrojan(username, exp, quota, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Renew Akun', type, exp, totalHarga);;
             } else if (type === 'shadowsocks') {
               msg = await renewshadowsocks(username, exp, quota, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Renew Akun', type, exp, totalHarga);;
             } else if (type === 'ssh') {
               msg = await renewssh(username, exp, iplimit, serverId);
+              await sendTransactionNotification(ctx.from.id, 'Renew Akun', type, exp, totalHarga);;
             }
           }
           db.run('UPDATE users SET saldo = saldo - ? WHERE user_id = ?', [totalHarga, ctx.from.id], (err) => {
@@ -1124,6 +1484,8 @@ bot.on('text', async (ctx) => {
     delete userState[ctx.chat.id];
   }
 });
+
+
 
 
 bot.action('addserver', async (ctx) => {
@@ -2099,6 +2461,15 @@ async function handleDepositState(ctx, userId, data) {
       return await ctx.answerCbQuery('⚠️ Jumlah minimal adalah 100 perak!', { show_alert: true });
     }
     global.depositState[userId].action = 'confirm_amount';
+    
+    try {
+    console.log('Mencoba menghapus pesan...');
+    await ctx.deleteMessage();
+    console.log('Pesan berhasil dihapus.');
+  } catch (deleteError) {
+    console.warn('Tidak dapat menghapus pesan:', deleteError.message);
+  }
+  
     await processDeposit(ctx, currentAmount);
     return;
   } else {
@@ -2372,7 +2743,7 @@ async function processDeposit(ctx, amount) {
       [
         {
           text: "🛠 Hubungi Admin",
-          url: "https://t.me/Regersays"
+          url: "https://t.me/regersays"
         }
       ]
     ];
