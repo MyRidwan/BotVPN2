@@ -247,7 +247,7 @@ async function sendMainMenu(ctx) {
       { text: '💰 TopUp Saldo', callback_data: 'topup_saldo' }
     ], 
     [
-      { text: '🚀 Saluran Wa', url: 'https://saluran.myrid.my.id' }
+      { text: '🚀 Saluran Wa', url: 'https://whatsapp.com/channel/0029VbAqlZ1JP20xrByCXk15' }
     ],
   ];
 
