@@ -2659,8 +2659,8 @@ const caption =
 const inlineKeyboard = [
   [
     {
-      text: "📢 Join Channel",
-      url: "https://t.me/freenetlite"
+      text: "📢 Join Group",
+      url: "https://t.me/myridtunnel"
     }
   ]
 ];
