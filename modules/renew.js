@@ -88,8 +88,8 @@ async function renewvmess(username, exp, quota, limitip, serverId) {
 ┌────────────────────
 │ Username: \`${username}\`
 │ Kadaluarsa: \`${vmessData.expired}\`
-│ Kuota: \`${vmessData.quota === '0 GB' ? 'Unlimited' : vlessData.quota}\`
-│ Batas IP: \`${vmessData.ip_limit === '0' ? 'Unlimited' : vlessData.ip_limit} IP\`
+│ Kuota: \`${vmessData.quota === '0 GB' ? 'Unlimited' : vmessData.quota}\`
+│ Batas IP: \`${vmessData.ip_limit === '0' ? 'Unlimited' : vmessData.ip_limit} IP\`
 └────────────────────
 ✅ *Akun berhasil diperbarui* ✨
 *Makasih sudah pakai layanan kami*
