@@ -31,9 +31,9 @@ hapus_bot_lama() {
 pasang_package() {
     echo -e "${blue}Memulai pengecekan dan instalasi dependensi...${reset}"
 
-    # Install Node.js v18 (stabil untuk Debian 10+/Ubuntu 20+)
-    if ! command -v node >/dev/null 2>&1 || ! node -v | grep -q 'v18'; then
-        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    # Install Node.js v20 (stabil untuk Debian 10+/Ubuntu 20+)
+    if ! command -v node >/dev/null 2>&1 || ! node -v | grep -q 'v20'; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
         apt-get install -y nodejs
     fi
 
@@ -88,9 +88,18 @@ server_app() {
 
     read -p "Masukkan API KEY: " apikey
     while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " apikey; done
+    
+    read -p "Masukkan Chat ID Group Telegram: " chatid_group
+    while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " chatid_group; done
+    
+    read -p "Masukkan Username Saweria: " username_saweria
+    while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " username_saweria; done
+    
+    read -p "Masukkan Email Saweria: " saweria_email
+    while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " saweria_email; done
 
     # Simpan konfigurasi ke file .vars.json
-    cat >/root/BotVPN/.vars.json <<EOF
+    cat >/root/BotVPN2/.vars.json <<EOF
 {
   "BOT_TOKEN": "$token",
   "USER_ID": "$adminid",
@@ -98,7 +107,10 @@ server_app() {
   "PORT": "50123",
   "DATA_QRIS": "$dataqris",
   "MERCHANT_ID": "$merchantid",
-  "API_KEY": "$apikey"
+  "API_KEY": "$apikey",
+  "GROUP_CHAT_ID": "$chatid_group",
+  "SAWERIA_USERNAME": "username_saweria",
+  "SAWERIA_EMAIL": "$saweria_email"
 }
 EOF
 
@@ -126,13 +138,15 @@ After=network.target
 
 [Service]
 ExecStart=$NODE_PATH /root/BotVPN2/app.js
-Restart=always
-User=root
-Environment=PATH=/usr/bin:/usr/local/bin
-Environment=NODE_ENV=production
 WorkingDirectory=/root/BotVPN2
-StandardOutput=journal
-StandardError=journal
+Restart=always
+RestartSec=3
+User=root
+Environment=NODE_ENV=production
+Environment=TZ=Asia/Jakarta
+StandardOutput=append:/var/log/sellvpn.log
+StandardError=append:/var/log/sellvpn-error.log
+LimitNOFILE=10000
 
 [Install]
 WantedBy=multi-user.target
