@@ -39,20 +39,20 @@ const {
   trialshadowsocks
 } = require("./modules/create");
 
-const { 
-  createssh, 
-  createvmess, 
-  createvless, 
-  createtrojan, 
-  createshadowsocks 
+const {
+  createssh,
+  createvmess,
+  createvless,
+  createtrojan,
+  createshadowsocks
 } = require('./modules/create');
 
-const { 
-  renewssh, 
-  renewvmess, 
-  renewvless, 
-  renewtrojan, 
-  renewshadowsocks 
+const {
+  renewssh,
+  renewvmess,
+  renewvless,
+  renewtrojan,
+  renewshadowsocks
 } = require('./modules/renew');
 
 const fs = require('fs');
@@ -63,11 +63,12 @@ const SAWERIA_EMAIL = vars.SAWERIA_EMAIL;
 
 const BOT_TOKEN = vars.BOT_TOKEN;
 const port = vars.PORT || 50123;
-const ADMIN = vars.USER_ID; 
+const ADMIN = vars.USER_ID;
 const NAMA_STORE = vars.NAMA_STORE || 'XWANSTORE';
 const DATA_QRIS = vars.DATA_QRIS;
 const MERCHANT_ID = vars.MERCHANT_ID;
 const API_KEY = vars.API_KEY;
+const groupId = vars.GROUP_CHAT_ID;
 
 const bot = new Telegraf(BOT_TOKEN);
 const adminIds = ADMIN;
@@ -81,6 +82,7 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
 
         db.serialize(() => {
 
+            // Inisialisasi tabel bonus_config
             db.run(`
                 CREATE TABLE IF NOT EXISTS bonus_config (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -101,7 +103,7 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
                 else logger.info('✅ Default bonus_config dijamin ada');
             });
 
-            
+            // Inisialisasi tabel bonus_log
             db.run(`
                 CREATE TABLE IF NOT EXISTS bonus_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,6 +118,7 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
                 else logger.info('✅ Tabel bonus_log siap');
             });
 
+            // Inisialisasi tabel pending_deposits
             db.run(`
                 CREATE TABLE IF NOT EXISTS pending_deposits (
                     unique_code TEXT PRIMARY KEY,
@@ -135,6 +138,7 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
                 }
             });
 
+            // Inisialisasi tabel log_penjualan (dengan perbaikan)
             db.run(`
                 CREATE TABLE IF NOT EXISTS log_penjualan (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -145,75 +149,193 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
                     harga INTEGER,
                     masa_aktif_hari INTEGER,
                     waktu_transaksi TEXT,
-                    action_type TEXT
+                    action_type TEXT,
+                    user_role TEXT DEFAULT 'member'
                 )
             `, (err) => {
                 if (err) {
                     logger.error('❌ Gagal membuat tabel log_penjualan:', err.message);
                 } else {
                     logger.info('✅ Tabel log_penjualan siap');
+                    db.all("PRAGMA table_info(log_penjualan)", (err, columns) => { // Menggunakan db.all
+                        if (err) {
+                            logger.error('Error getting table info for log_penjualan:', err.message);
+                            return;
+                        }
+                        if (columns && Array.isArray(columns)) {
+                            const hasUserRoleColumn = columns.some(col => col.name === 'user_role');
+                            if (!hasUserRoleColumn) {
+                                db.run("ALTER TABLE log_penjualan ADD COLUMN user_role TEXT DEFAULT 'member'", (err) => {
+                                    if (err) logger.error('Error adding user_role column to log_penjualan table:', err.message);
+                                    else logger.info('✅ Added user_role column to log_penjualan table');
+                                });
+                            }
+                        } else {
+                            logger.warn('PRAGMA table_info(log_penjualan) did not return an array for columns.');
+                        }
+                    });
                 }
             });
 
-        });
+            // Inisialisasi tabel unlimited_trial_users
+            db.run(`
+                CREATE TABLE IF NOT EXISTS unlimited_trial_users (
+                    user_id INTEGER PRIMARY KEY
+                )
+            `, (err) => {
+                if (err) {
+                    logger.error('❌ Gagal membuat tabel unlimited_trial_users:', err.message);
+                } else {
+                    logger.info('✅ Tabel unlimited_trial_users siap');
+                }
+            });
+            
+            db.run(`
+                CREATE TABLE IF NOT EXISTS ui_config (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    show_trial_button INTEGER DEFAULT 1,
+                    show_sewa_script_button INTEGER DEFAULT 1
+                )
+            `, (err) => {
+                if (err) {
+                    logger.error('❌ Gagal membuat tabel ui_config:', err.message);
+                } else {
+                    logger.info('✅ Tabel ui_config siap');
+                }
+            });
+
+            db.run(`
+                INSERT OR IGNORE INTO ui_config (id, show_trial_button, show_sewa_script_button)
+                VALUES (1, 1, 1)
+            `, (err) => {
+                if (err) {
+                    logger.error('❌ Gagal insert default ui_config:', err.message);
+                } else {
+                    logger.info('✅ Default ui_config dijamin ada');
+                }
+            });
+            
+            db.all(`PRAGMA table_info(ui_config)`, (err, columns) => {
+                if (err) {
+                    logger.error('❌ Gagal ambil info kolom ui_config:', err.message);
+                    return;
+                }
+
+                const hasSewaScriptColumn = columns.some(col => col.name === 'show_sewa_script_button');
+                if (!hasSewaScriptColumn) {
+                    db.run(`ALTER TABLE ui_config ADD COLUMN show_sewa_script_button INTEGER DEFAULT 1`, (err) => {
+                        if (err) {
+                            logger.error('❌ Gagal menambah kolom show_sewa_script_button:', err.message);
+                        } else {
+                            logger.info('✅ Kolom show_sewa_script_button ditambahkan ke ui_config');
+                        }
+                    });
+                } else {
+                    logger.info('ℹ️ Kolom show_sewa_script_button sudah tersedia di ui_config');
+                }
+            });
+             
+            // Inisialisasi tabel reseller_config
+            
+            db.run(`
+                CREATE TABLE IF NOT EXISTS reseller_config (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    discount_percent INTEGER DEFAULT 0
+                )
+            `, (err) => {
+                if (err) logger.error('❌ Gagal membuat tabel reseller_config:', err.message);
+                else logger.info('✅ Tabel reseller_config siap');
+            });
+
+            db.run(`
+                INSERT OR IGNORE INTO reseller_config (id, discount_percent)
+                VALUES (1, 0)
+            `, (err) => {
+                if (err) logger.error('❌ Gagal insert default reseller_config:', err.message);
+                else logger.info('✅ Default reseller_config dijamin ada');
+            });
+
+            // Inisialisasi tabel topup_log
+            db.run(`
+              CREATE TABLE IF NOT EXISTS topup_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT,
+                amount INTEGER,
+                method TEXT,
+                waktu TEXT
+              )
+            `, (err) => {
+              if (err) logger.error('❌ Gagal membuat tabel topup_log:', err.message);
+              else logger.info('✅ Tabel topup_log siap');
+            });
+
+            // Inisialisasi tabel Server
+            db.run(`CREATE TABLE IF NOT EXISTS Server (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              domain TEXT,
+              auth TEXT,
+              harga INTEGER,
+              nama_server TEXT,
+              quota INTEGER,
+              iplimit INTEGER,
+              batas_create_akun INTEGER,
+              total_create_akun INTEGER
+            )`, (err) => {
+              if (err) {
+                logger.error('Kesalahan membuat tabel Server:', err.message);
+              } else {
+                logger.info('Server table created or already exists');
+              }
+            });
+
+            // Inisialisasi tabel users (dengan perbaikan PRAGMA)
+            db.run(`CREATE TABLE IF NOT EXISTS users (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER UNIQUE,
+              saldo INTEGER DEFAULT 0,
+              role TEXT DEFAULT 'member',
+              CONSTRAINT unique_user_id UNIQUE (user_id)
+            )`, (err) => {
+              if (err) {
+                logger.error('Kesalahan membuat tabel users:', err.message);
+              } else {
+                logger.info('Users table created or already exists');
+                db.all("PRAGMA table_info(users)", (err, columns) => { // Menggunakan db.all
+                  if (err) {
+                    logger.error('Error getting table info:', err.message);
+                    return;
+                  }
+                  if (columns && Array.isArray(columns)) {
+                      const hasRoleColumn = columns.some(col => col.name === 'role');
+                      if (!hasRoleColumn) {
+                          db.run("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'member'", (err) => {
+                              if (err) logger.error('Error adding role column to users table:', err.message);
+                              else logger.info('✅ Added role column to users table');
+                          });
+                      }
+                  } else {
+                      logger.warn('PRAGMA table_info(users) did not return an array for columns.');
+                  }
+                });
+              }
+            });
+
+            // Inisialisasi tabel TrialLog
+            db.run(`
+              CREATE TABLE IF NOT EXISTS TrialLog (
+                user_id INTEGER,
+                date TEXT,
+                count INTEGER DEFAULT 0,
+                UNIQUE(user_id, date)
+            )
+            `);
+
+        }); // End of db.serialize
     }
 });
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS topup_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    username TEXT,
-    amount INTEGER,
-    method TEXT,
-    waktu TEXT
-  )
-`, (err) => {
-  if (err) logger.error('❌ Gagal membuat tabel topup_log:', err.message);
-  else logger.info('✅ Tabel topup_log siap');
-});
-
-db.run(`CREATE TABLE IF NOT EXISTS Server (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  domain TEXT,
-  auth TEXT,
-  harga INTEGER,
-  nama_server TEXT,
-  quota INTEGER,
-  iplimit INTEGER,
-  batas_create_akun INTEGER,
-  total_create_akun INTEGER
-)`, (err) => {
-  if (err) {
-    logger.error('Kesalahan membuat tabel Server:', err.message);
-  } else {
-    logger.info('Server table created or already exists');
-  }
-});
-
-db.run(`CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER UNIQUE,
-  saldo INTEGER DEFAULT 0,
-  CONSTRAINT unique_user_id UNIQUE (user_id)
-)`, (err) => {
-  if (err) {
-    logger.error('Kesalahan membuat tabel users:', err.message);
-  } else {
-    logger.info('Users table created or already exists');
-  }
-});
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS TrialLog (
-    user_id INTEGER,
-    date TEXT,
-    count INTEGER DEFAULT 0,
-    UNIQUE(user_id, date)
-)
-`);
-
-const lastMenus = {}; 
+const lastMenus = {};
 const userState = {};
 logger.info('User state initialized');
 
@@ -223,6 +345,7 @@ bot.command(['start', 'menu'], async (ctx) => {
   const userId = ctx.from.id;
   const chatId = ctx.chat.id;
 
+  // Hapus pesan command user yang baru saja diketik
   try {
     await ctx.telegram.deleteMessage(chatId, ctx.message.message_id);
     logger.info(`🧹 Pesan command user ${userId} berhasil dihapus`);
@@ -230,13 +353,14 @@ bot.command(['start', 'menu'], async (ctx) => {
     console.warn(`⚠️ Tidak bisa hapus pesan command user ${userId}:`, e.message);
   }
 
+  // Cek apakah user sudah ada di database, jika belum, tambahkan
   db.get('SELECT * FROM users WHERE user_id = ?', [userId], (err, row) => {
     if (err) {
       logger.error('❌ Kesalahan saat memeriksa user_id:', err.message);
       return;
     }
     if (!row) {
-      db.run('INSERT INTO users (user_id) VALUES (?)', [userId], (err) => {
+      db.run('INSERT INTO users (user_id, role) VALUES (?, ?)', [userId, 'member'], (err) => {
         if (err) {
           logger.error('❌ Gagal menyimpan user_id:', err.message);
         } else {
@@ -248,58 +372,138 @@ bot.command(['start', 'menu'], async (ctx) => {
     }
   });
 
-  if (lastMenus[userId]) {
-    try {
-      await ctx.telegram.deleteMessage(chatId, lastMenus[userId]);
-      logger.info(`🧹 Menu lama milik ${userId} dihapus`);
-    } catch (e) {
-      console.warn(`⚠️ Gagal hapus menu lama user ${userId}:`, e.message);
-    }
-  }
-
-  const sent = await sendMainMenu(ctx);
-  if (sent?.message_id) {
-    lastMenus[userId] = sent.message_id;
-    logger.info(`✅ Menu baru dikirim ke ${userId} dengan message_id ${sent.message_id}`);
-  }
+  // Panggil sendMainMenu. Fungsi ini sekarang akan mengurus penghapusan menu lama
+  // dan pengiriman menu baru, serta menyimpan message_id-nya.
+  await sendMainMenu(ctx);
 });
+// --- AKHIR COMMAND /start atau /menu ---
+
 
 bot.command('admin', async (ctx) => {
   logger.info('Admin menu requested');
-  
-  // Hapus pesan command "/admin" user
-  try {
-    await ctx.telegram.deleteMessage(ctx.chat.id, ctx.message.message_id);
-  } catch (e) {}
 
   if (!adminIds.includes(ctx.from.id)) {
-    await ctx.reply('❌ Anda tidak memiliki izin untuk mengakses menu admin.');
-    return;
+    // Menghapus pesan command /admin jika bukan admin
+    try { await ctx.telegram.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch (e) {}
+    return ctx.reply('❌ Anda tidak memiliki izin untuk mengakses menu admin.');
   }
 
-  // Hapus pesan menu admin sebelumnya kalau ada
+  try { await ctx.telegram.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch (e) {}
+
   if (lastMenus[ctx.from.id]) {
-    try {
-      await ctx.telegram.deleteMessage(ctx.chat.id, lastMenus[ctx.from.id]);
-    } catch (e) {}
+    try { await ctx.telegram.deleteMessage(ctx.chat.id, lastMenus[ctx.from.id]); } catch (e) {}
     delete lastMenus[ctx.from.id];
   }
 
-  // Kirim menu admin baru
   const sent = await sendAdminMenu(ctx);
   if (sent?.message_id) {
     lastMenus[ctx.from.id] = sent.message_id;
   }
 });
 
-async function sendMainMenu(ctx) {
-  const keyboard = [
-  [{ text: '💠 Trial Akun', callback_data: 'service_trial' }],
-  [{ text: '✏️ Buat Akun', callback_data: 'service_create' }, { text: '♻️ Renew Akun', callback_data: 'service_renew' }],
-  [{ text: '🛒 Sewa Script', callback_data: 'service_sewascript' }],
-  [{ text: '💰 TopUp Saldo', callback_data: 'menu_topup' }]
-];
 
+// --- BAGIAN FUNGSI sendMainMenu (GANTI SELURUHNYA) ---
+async function sendMainMenu(ctx) {
+  const userId = ctx.from.id;
+  const chatId = ctx.chat.id; // Dapatkan chatId di sini
+
+  // --- LOGIKA PENGHAPUSAN MENU SEBELUMNYA (DIPINDAHKAN KE SINI) ---
+  if (lastMenus[userId]) {
+    try {
+      await ctx.telegram.deleteMessage(chatId, lastMenus[userId]);
+      logger.info(`🧹 Menu lama milik ${userId} dihapus oleh sendMainMenu`);
+      delete lastMenus[userId]; // Hapus dari cache setelah dihapus
+    } catch (e) {
+      // Abaikan error jika pesan sudah tidak ada atau tidak bisa dihapus (misal: terlalu lama)
+      console.warn(`⚠️ Gagal hapus menu lama user ${userId} di sendMainMenu:`, e.message);
+    }
+  }
+  // --- AKHIR LOGIKA PENGHAPUSAN ---
+
+  // Ambil data user
+  const userName = ctx.from.username ? `@${ctx.from.username}` : (ctx.from.first_name || 'Member');
+  let saldo = 0;
+  let userRole = 'member'; // Default role
+  try {
+    const row = await new Promise((resolve, reject) => {
+      db.get('SELECT saldo, role FROM users WHERE user_id = ?', [userId], (err, row) => { // Mengambil saldo dan role
+        if (err) reject(err); else resolve(row);
+      });
+    });
+    saldo = row ? row.saldo : 0;
+    userRole = row ? row.role : 'member'; // Set role dari DB
+  } catch (e) {
+    saldo = 0;
+    userRole = 'member'; // Fallback jika ada error
+  }
+
+  // Statistik user dan global (menggunakan log_penjualan)
+  const now = new Date();
+  // Menggunakan ISOString untuk perbandingan tanggal di SQLite
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  let userToday = 0, userWeek = 0, userMonth = 0;
+  let globalToday = 0, globalWeek = 0, globalMonth = 0;
+
+  try {
+    // Statistik Anda
+    userToday = await new Promise((resolve) => {
+      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', [userId, todayStart], (err, row) => resolve(row ? row.count : 0));
+    });
+    userWeek = await new Promise((resolve) => {
+      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', [userId, weekStart], (err, row) => resolve(row ? row.count : 0));
+    });
+    userMonth = await new Promise((resolve) => {
+      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', [userId, monthStart], (err, row) => resolve(row ? row.count : 0));
+    });
+
+    // Statistik Global
+    globalToday = await new Promise((resolve) => {
+      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', [todayStart], (err, row) => resolve(row ? row.count : 0));
+    });
+    globalWeek = await new Promise((resolve) => {
+      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', [weekStart], (err, row) => resolve(row ? row.count : 0));
+    });
+    globalMonth = await new Promise((resolve) => {
+      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', [monthStart], (err, row) => resolve(row ? row.count : 0));
+    });
+  } catch (e) {
+    logger.error('Error fetching statistics:', e.message);
+  }
+
+  // Jumlah pengguna bot
+  let jumlahPengguna = 0;
+  try {
+    const row = await new Promise((resolve, reject) => {
+      db.get('SELECT COUNT(*) AS count FROM users', (err, row) => { if (err) reject(err); else resolve(row); });
+    });
+    jumlahPengguna = row.count;
+  } catch (e) { jumlahPengguna = 0; }
+
+  // Latency (dummy, bisa diubah sesuai kebutuhan)
+  const latency = (Math.random() * 0.1 + 0.01).toFixed(2);
+
+  // Ambil status tombol trial dari database
+  const tombolTrialAktif = await new Promise((resolve) => {
+    db.get('SELECT show_trial_button FROM ui_config WHERE id = 1', (err, row) => {
+      if (err) return resolve(false);
+      resolve(row?.show_trial_button === 1);
+    });
+  });
+
+  const isUnlimited = await new Promise((resolve) => {
+    db.get('SELECT * FROM unlimited_trial_users WHERE user_id = ?', [userId], (err, row) => {
+      if (err) return resolve(false);
+      resolve(row != null);
+    });
+  });
+
+  const isAdmin = adminIds.includes(userId);
+  const bolehLihatTrial = tombolTrialAktif || isUnlimited || isAdmin;
+
+  // Uptime bot
   const uptime = os.uptime();
   const days = Math.floor(uptime / 86400);
   const hours = Math.floor((uptime % 86400) / 3600);
@@ -307,7 +511,7 @@ async function sendMainMenu(ctx) {
   const seconds = Math.floor(uptime % 60);
   const uptimeFormatted = `${days}d ${hours}h ${minutes}m ${seconds}s`;
 
-  const now = new Date();
+  // Tanggal dan waktu saat ini
   const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   const currentDay = dayNames[now.getDay()];
   const currentDate = new Intl.DateTimeFormat('id-ID', {
@@ -317,67 +521,92 @@ async function sendMainMenu(ctx) {
   }).format(now);
   const timeNow = now.toTimeString().split(' ')[0];
 
-  const userId = ctx.from.id;
-  const username = ctx.from.username ? `@${ctx.from.username}` : 'Tidak tersedia';
-
-  let jumlahServer = 0, jumlahPengguna = 0, saldo = 0;
-
+  let jumlahServer = 0;
   try {
     jumlahServer = await new Promise((resolve, reject) => {
       db.get('SELECT COUNT(*) AS count FROM Server', (err, row) => {
         if (err) reject(err); else resolve(row.count);
       });
     });
-
-    jumlahPengguna = await new Promise((resolve, reject) => {
-      db.get('SELECT COUNT(*) AS count FROM users', (err, row) => {
-        if (err) reject(err); else resolve(row.count);
-      });
-    });
-
-    saldo = await new Promise((resolve, reject) => {
-      db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], (err, row) => {
-        if (err) reject(err); else resolve(row ? row.saldo : 0);
-      });
-    });
   } catch (e) {
-    logger.error('Gagal ambil data:', e.message);
+    logger.error('Gagal ambil data jumlah server:', e.message);
   }
 
+  // Menentukan teks status berdasarkan role
+  let statusText = '';
+  if (adminIds.includes(userId)) { // Cek jika user adalah admin
+    statusText = `👑 <b>» Status:</b> <code>Admin</code>`;
+  } else if (userRole === 'reseller') {
+    statusText = `🏆 <b>» Status:</b> <code>Reseller</code>`;
+  } else {
+    statusText = `👤 <b>» Status:</b> <code>Member</code>`; // Mengubah emoji untuk Member
+  }
+
+  // Pesan utama dengan format yang sudah padat dan rapi
   const messageText = `
-━━━━━━━━━━━━━━━━━━━━━━
-*≡                  ROBOT VPN                 ≡*
-━━━━━━━━━━━━━━━━━━━━━━
-Selamat datang di *${NAMA_STORE}* 🚀
-Bot otomatis untuk membeli
-Akun VPN dengan mudah dan cepat.
-━━━━━━━━━━━━━━━━━━━━━━
-💲 *» Saldo:* \`Rp.${saldo}\`
-━━━━━━━━━━━━━━━━━━━━━━
-🌀 *» Username:* \`${username}\`
-📋 *» Your ID:* \`${userId}\`
-♻️ *» Bot Aktif:* \`${uptimeFormatted}\`
-✨ *» Trial 2x Sehari *
-🥇 *» Support Wildcard & Enhanced*
-━━━━━━━━━━━━━━━━━━━━━━
-🏷️ *» Jam:* \`${timeNow}\` WIB
-🏷️ *» Hari:* \`${currentDay}, ${currentDate}\`
-🏷️ *» Server:* \`${jumlahServer}\`
-🏷️ *» Total User:* \`${jumlahPengguna}\`
-━━━━━━━━━━━━━━━━━━━━━━
-♂️ *» Contact:* [@kytxz](https://t.me/kytxz)`;
+━━━━━━━━━━━━━━━━━━━━━━━━
+≡                    <b>ROBOT VPN</b>                      ≡
+━━━━━━━━━━━━━━━━━━━━━━━━
+Selamat datang di <b>${NAMA_STORE}</b> 🚀
+Bot otomatis untuk membeli Akun VPN dengan mudah dan cepat.
+━━━━━━━━━━━━━━━━━━━━━━━━
+💲 <b>» Saldo:</b> <code>Rp.${saldo.toLocaleString('id-ID')}</code>
+━━━━━━━━━━━━━━━━━━━━━━━━
+${statusText}
+🌐 <b>» Username:</b> ${userName}
+📋 <b>» Your ID:</b> <code>${userId}</code>
+♻️ <b>» Bot Aktif:</b> <code>${uptimeFormatted}</code>
+✨ <b>» Trial 2x Sehari</b>
+🥇 <b>» Support Wildcard & Enhanced</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+<blockquote>📚 <b>Statistik Anda</b>
+» Hari Ini: ${userToday} akun
+» Minggu Ini: ${userWeek} akun
+» Bulan Ini: ${userMonth} akun
+
+🌐 <b>Statistik Global</b>
+» Hari Ini: ${globalToday} akun
+» Minggu Ini: ${globalWeek} akun
+» Bulan Ini: ${globalMonth} akun</blockquote>
+━━━━━━━━━━━━━━━━━━━━━━━━
+🧭 <b>» Waktu:</b> <code>${timeNow} WIB</code>
+🏷️ <b>» Tanggal:</b> <code>${currentDay}, ${currentDate}</code>
+🏷️ <b>» Server:</b> <code>${jumlahServer}</code> <b>|️ Total User:</b> <code>${jumlahPengguna}</code>
+☎️ <b>» Contact Admin:</b> <a href="https://t.me/kytxz">@kytxz</a>
+━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+
+  const keyboard = [];
+
+  if (bolehLihatTrial) {
+    keyboard.push([{ text: '💠 Trial Akun', callback_data: 'service_trial' }]);
+  }
+
+  keyboard.push([{ text: '✏️ Buat Akun', callback_data: 'service_create' }, { text: '♻️ Renew Akun', callback_data: 'service_renew' }]);
+  keyboard.push([{ text: '🛒 Sewa Script', callback_data: 'service_sewascript' }]);
+  keyboard.push([{ text: '💰 TopUp Saldo', callback_data: 'menu_topup' }]);
+
 
   try {
+    // Menggunakan ctx.reply untuk mengirim pesan baru, karena penghapusan menu lama sudah di handle di awal fungsi ini.
     const sent = await ctx.reply(messageText, {
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true,
+      parse_mode: 'HTML', // Menggunakan HTML untuk formatting yang lebih baik
+      disable_web_page_preview: true, // Untuk menghindari preview link Telegram
       reply_markup: { inline_keyboard: keyboard }
     });
-    return sent;
-  } catch (err) {
-    logger.error('Gagal kirim menu utama:', err.message);
+    // Simpan message_id dari pesan yang baru dikirim
+    if (sent?.message_id) {
+      lastMenus[userId] = sent.message_id;
+      logger.info(`✅ Menu baru dikirim ke ${userId} dengan message_id ${sent.message_id}`);
+    }
+    return sent; // Mengembalikan objek pesan yang dikirim
+  } catch (error) {
+    logger.error('Error umum saat mengirim menu utama:', error);
+    // Jika terjadi error saat mengirim pesan baru, pastikan lastMenus dibersihkan
+    delete lastMenus[userId];
   }
 }
+
 
 bot.command('hapuslog', async (ctx) => {
   if (!adminIds.includes(ctx.from.id)) return ctx.reply('Tidak ada izin!');
@@ -392,8 +621,9 @@ bot.command('hapuslog', async (ctx) => {
   }
 });
 
+// [UPDATE: Perintah /helpadmin yang diperbarui]
 bot.command('helpadmin', async (ctx) => {
-  const userId = ctx.message.from.id;
+  const userId = ctx.from.id;
   if (!adminIds.includes(userId)) {
       return ctx.reply('⚠️ Anda tidak memiliki izin untuk menggunakan perintah ini.', { parse_mode: 'Markdown' });
   }
@@ -403,7 +633,7 @@ bot.command('helpadmin', async (ctx) => {
 1. /start - Mengaktifkan bot.
 2. /menu - Menampilkan daftar menu bot.
 3. /admin - Menampilkan fitur-fitur admin.
-4. /broadcast - Mengirim pesan siaran ke semua pengguna.
+4. /broadcast - Kirim pesan siaran ke semua pengguna.
 5. /addserver - Menambahkan server baru.
 6. /addsaldo - Menambahkan saldo ke akun pengguna.
 7. /kurangisaldo - Mengurangi saldo user.
@@ -419,12 +649,21 @@ bot.command('helpadmin', async (ctx) => {
 17. /editlimitcreate - Mengedit batas pembuatan akun server.
 18. /edittotalcreate - Mengedit total pembuatan akun server.
 19. /hapuslog - Menghapus log bot.
-20. /helpadmin - Menampilkan daftar perintah admin.
+20. /unlimitedtrial - Memberikan akses trial unlimited ke user.
+21. /removeunlimitedtrial - Mencabut akses trial unlimited dari user.
+22. /listunlimitedtrial - Melihat daftar user yang memiliki trial unlimited.
+23. /setreseller - Mengubah role user menjadi reseller.
+24. /unsetreseller - Mengubah role reseller menjadi member biasa.
+25. /listreseller - Melihat daftar semua reseller.
+26. /setdiskonreseller - Mengatur persentase diskon untuk reseller.
+27. /resetdiskonreseller - Mereset persentase diskon reseller ke 0%.
+28. /helpadmin - Menampilkan daftar perintah admin.
 
 📝 *Catatan:* Gunakan perintah ini dengan format yang benar untuk menghindari kesalahan.
 `;
   ctx.reply(helpMessage, { parse_mode: 'Markdown' });
 });
+
 bot.command('broadcast', async (ctx) => {
   const userId = ctx.message.from.id;
 
@@ -483,8 +722,8 @@ bot.command('broadcast', async (ctx) => {
     }
 
     ctx.reply(`📣 Broadcast selesai!\n✅ Berhasil: ${success}\n❌ Gagal: ${failed}`);
-  }); 
-}); 
+  });
+});
 function formatRupiah(angka) {
   return `Rp${(angka || 0).toLocaleString('id-ID')}`;
 }
@@ -593,7 +832,7 @@ bot.action('statistik_penjualan', async (ctx) => {
   });
 });
 bot.command('addsaldo', async (ctx) => {
-  const userId = ctx.message.from.id;
+  const userId = ctx.from.id;
   if (!adminIds.includes(userId)) {
       return ctx.reply('⚠️ Anda tidak memiliki izin untuk menggunakan perintah ini.', { parse_mode: 'Markdown' });
   }
@@ -850,7 +1089,7 @@ bot.command('addserver', async (ctx) => {
       return ctx.reply('⚠️ `harga`, `quota`, `iplimit`, dan `batas_create_akun` harus berupa angka.', { parse_mode: 'Markdown' });
   }
 
-  db.run("INSERT INTO Server (domain, auth, harga, nama_server, quota, iplimit, batas_create_akun) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+  db.run("INSERT INTO Server (domain, auth, harga, nama_server, quota, iplimit, batas_create_akun) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [domain, auth, parseInt(harga), nama_server, parseInt(quota), parseInt(iplimit), parseInt(batas_create_akun)], function(err) {
       if (err) {
           logger.error('⚠️ Kesalahan saat menambahkan server:', err.message);
@@ -1172,10 +1411,91 @@ bot.action('toggle_topup_saweria', async (ctx) => {
     await sendAdminMenu(ctx);
 });
 
+bot.action(/^toggle_trial_btn_(on|off)$/, async (ctx) => {
+  try {
+    const match = ctx.match || [];
+    const mode = match[1];
+
+    // Log saat tombol diklik
+    console.log(`Toggle tombol trial: ${ctx.from.id} ingin ${mode}`);
+
+    if (!adminIds.includes(ctx.from.id)) return;
+
+    const newStatus = mode === 'on' ? 1 : 0;
+
+    db.run('UPDATE ui_config SET show_trial_button = ? WHERE id = 1', [newStatus], async (err) => {
+      if (err) {
+        logger.error('❌ Gagal update tombol trial:', err.message);
+        return await ctx.answerCbQuery('❌ Gagal mengubah status.');
+      }
+
+      await ctx.answerCbQuery('✅ Status tombol trial diperbarui.');
+
+      // Hapus pesan admin lama
+      try {
+        await ctx.telegram.deleteMessage(ctx.chat.id, ctx.callbackQuery.message.message_id);
+      } catch (e) {}
+
+      // Kirim ulang menu admin
+      await sendAdminMenu(ctx);
+    });
+  } catch (error) {
+    logger.error('❌ ERROR toggle_trial_btn:', error.message);
+    await ctx.answerCbQuery('❌ Terjadi kesalahan.');
+  }
+});
+
+bot.action(/toggle_sewascript_btn_(on|off)/, async (ctx) => {
+    const action = ctx.match[1]; // "on" atau "off"
+    const newValue = action === 'on' ? 1 : 0;
+
+    db.run(`UPDATE ui_config SET show_sewa_script_button = ? WHERE id = 1`, [newValue], function (err) {
+        if (err) {
+            logger.error('❌ Gagal update show_sewa_script_button:', err.message);
+            return ctx.answerCbQuery('Gagal mengubah status tombol.');
+        }
+
+        logger.info(`✅ Tombol Sewa Script diubah ke ${newValue === 1 ? 'ON' : 'OFF'}`);
+        ctx.answerCbQuery(`Tombol Sewa Script ${newValue === 1 ? 'diaktifkan ✅' : 'dinonaktifkan ❌'}`);
+        return sendAdminMenu(ctx); // Refresh tampilan menu admin
+    });
+});
+
 async function sendAdminMenu(ctx) {
     const config = loadButtonConfig();
     const userId = ctx.from.id;
     const chatId = ctx.chat.id;
+
+
+    const showTrial = await new Promise((resolve) => {
+    db.get('SELECT show_trial_button FROM ui_config WHERE id = 1', (err, row) => {
+        if (err) {
+            logger.error('❌ Gagal ambil show_trial_button:', err.message);
+            return resolve(1);
+        }
+        if (!row) {
+            logger.warn('⚠️ Row kosong untuk show_trial_button!');
+            return resolve(1);
+        }
+        logger.debug(`✅ show_trial_button: ${row.show_trial_button}`);
+        resolve(row.show_trial_button === 1 ? 1 : 0);
+    });
+});
+
+const showSewaScript = await new Promise((resolve) => {
+    db.get('SELECT show_sewa_script_button FROM ui_config WHERE id = 1', (err, row) => {
+        if (err) {
+            logger.error('❌ Gagal ambil show_sewa_script_button:', err.message);
+            return resolve(1);
+        }
+        if (!row) {
+            logger.warn('⚠️ Row kosong untuk show_sewa_script_button!');
+            return resolve(1);
+        }
+        logger.debug(`✅ show_sewa_script_button: ${row.show_sewa_script_button}`);
+        resolve(row.show_sewa_script_button === 1 ? 1 : 0);
+    });
+});
 
     const adminKeyboard = [
         [{ text: '✏️ Tambah Server', callback_data: 'addserver' }, { text: '❌ Hapus Server', callback_data: 'deleteserver' }],
@@ -1186,8 +1506,10 @@ async function sendAdminMenu(ctx) {
         [{ text: '💵 Tambah Saldo', callback_data: 'addsaldo_user' }, { text: '📋 List Server', callback_data: 'listserver' }],
         [{ text: '♻️ Reset Server', callback_data: 'resetdb' }, { text: 'ℹ️ Detail Server', callback_data: 'detailserver' }],
         [{ text: '🎁 Set Bonus TopUp', callback_data: 'bonus_topup_setting' }, { text: '📜 Log Bonus TopUp', callback_data: 'log_bonus_topup' }],
-        [{ text: `${config.topup_saldo ? '✅' : '❌'} Topup QRIS Orkut`, callback_data: 'toggle_topup_saldo' },{ text: `${config.topup_saweria ? '✅' : '❌'} Topup QRIS Saweria`, callback_data: 'toggle_topup_saweria' }],
-        [{ text: '📈 Hasil Penjualan', callback_data: 'statistik_penjualan' },{ text: '📑 Log Topup', callback_data: 'log_topup' }],
+        [{ text: `${config.topup_saldo ? '✅' : '❌'} Topup QRIS Orkut`, callback_data: 'toggle_topup_saldo' }, { text: `${config.topup_saweria ? '✅' : '❌'} Topup QRIS Saweria`, callback_data: 'toggle_topup_saweria' }],
+        [{text: `${showTrial ? '✅' : '❌'} Tombol Trial`, callback_data: `toggle_trial_btn_${showTrial ? 'off' : 'on'}`}, {text: `${showSewaScript ? '✅' : '❌'} Tombol Sewa Script`, callback_data: `toggle_sewascript_btn_${showSewaScript ? 'off' : 'on'}`}],
+        [{ text: '📈 Hasil Penjualan', callback_data: 'statistik_penjualan' }, { text: '📑 Log Topup', callback_data: 'log_topup' }],
+        [{ text: '👥 List Reseller', callback_data: 'listreseller' }],
         [{ text: '🔙 Kembali', callback_data: 'send_main_menu' }]
     ];
 
@@ -1286,7 +1608,7 @@ bot.action(/^daftar_(\d+)bln$/, async (ctx) => {
 
 bot.action(/^perpanjang_(\d+)bln$/, async (ctx) => {
   try {
-    await ctx.deleteMessage(); 
+    await ctx.deleteMessage();
   } catch (e) {
     console.warn('Gagal hapus pesan tombol:', e.message);
   }
@@ -1299,16 +1621,45 @@ bot.action(/^perpanjang_(\d+)bln$/, async (ctx) => {
   await ctx.reply('🌀 *Masukkan IP yang ingin diperpanjang:*', { parse_mode: 'Markdown' });
 });
 bot.action('service_sewascript', async (ctx) => {
-try {
+  try {
     await ctx.answerCbQuery();
   } catch (e) {
-    // Optional: log warning, jangan crash
     logger.warn('answerCbQuery error:', e.message);
   }
-  if (!ctx || !ctx.match) {
+
+  if (!ctx) {
     return ctx.reply('❌ *GAGAL!* Terjadi kesalahan saat memproses permintaan Anda. Silahkan coba lagi nanti.', { parse_mode: 'Markdown' });
   }
+
   await handleServiceAction(ctx, 'sewascript');
+});
+
+bot.action('toggle_sewascript_button', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) {
+    return ctx.answerCbQuery('❌ Tidak diizinkan', { show_alert: true });
+  }
+
+  db.get('SELECT show_sewa_script_button FROM ui_config WHERE id = 1', (err, row) => {
+    if (err) {
+      logger.error('❌ Gagal baca tombol sewa script:', err.message);
+      return ctx.answerCbQuery('⚠️ Gagal membaca status', { show_alert: true });
+    }
+
+    const current = row?.show_sewa_script_button === 1;
+    const newStatus = current ? 0 : 1;
+
+    db.run('UPDATE ui_config SET show_sewa_script_button = ? WHERE id = 1', [newStatus], (err) => {
+      if (err) {
+        logger.error('❌ Gagal update tombol sewa script:', err.message);
+        return ctx.answerCbQuery('⚠️ Gagal mengubah status', { show_alert: true });
+      }
+
+      const statusText = newStatus === 1 ? '✅ Diaktifkan' : '🚫 Dinonaktifkan';
+      ctx.answerCbQuery(`📜 Tombol Sewa Script ${statusText}`, { show_alert: true });
+
+    });
+  });
 });
 bot.action('service_create', async (ctx) => {
   if (!ctx || !ctx.match) {
@@ -1453,6 +1804,26 @@ async function startSelectServer(ctx, action, type, page = 0) {
   try {
     logger.info(`Memulai proses ${action} untuk ${type} di halaman ${page + 1}`);
 
+    // Ambil role user dan diskon reseller
+    const userId = ctx.from.id;
+    const userRole = await new Promise((resolve, reject) => {
+        db.get('SELECT role FROM users WHERE user_id = ?', [userId], (err, row) => {
+            if (err) reject(err);
+            else resolve(row ? row.role : 'member');
+        });
+    });
+
+    let resellerDiscount = 0;
+    if (userRole === 'reseller') {
+        resellerDiscount = await new Promise((resolve, reject) => {
+            db.get('SELECT discount_percent FROM reseller_config WHERE id = 1', (err, row) => {
+                if (err) reject(err);
+                else resolve(row ? row.discount_percent : 0);
+            });
+        });
+    }
+    // End of reseller discount fetch
+
     db.all('SELECT * FROM Server', [], (err, servers) => {
       if (err) {
         logger.error('⚠️ Error fetching servers:', err.message);
@@ -1485,15 +1856,15 @@ async function startSelectServer(ctx, action, type, page = 0) {
         }
         keyboard.push(row);
       }
-      
+
         if (action === 'trial') {
-          userState[ctx.chat.id] = { step: `execute_trial_${type}`, page: currentPage, serverId: null }; 
+          userState[ctx.chat.id] = { step: `execute_trial_${type}`, page: currentPage, serverId: null };
        } else {
           userState[ctx.chat.id] = { step: `${action}_username_${type}`, page: currentPage };
-       }      
-       
+       }
+
       const navButtons = [];
-      if (totalPages > 1) { 
+      if (totalPages > 1) {
         if (currentPage > 0) {
           navButtons.push({ text: '⬅️ Back', callback_data: `navigate_${action}_${type}_${currentPage - 1}` });
         }
@@ -1507,11 +1878,17 @@ async function startSelectServer(ctx, action, type, page = 0) {
       keyboard.push([{ text: '🔙 Kembali ke Menu Utama', callback_data: 'send_main_menu' }]);
 
       const serverList = currentServers.map(server => {
-        const hargaPer30Hari = server.harga * 30; 
+        let hargaPerHariTampilan = server.harga;
+        // Terapkan diskon untuk tampilan jika user adalah reseller
+        if (userRole === 'reseller' && resellerDiscount > 0) {
+            hargaPerHariTampilan = Math.floor(server.harga * (100 - resellerDiscount) / 100);
+        }
+
+        const hargaPer30HariTampilan = hargaPerHariTampilan * 30;
         const isFull = server.total_create_akun >= server.batas_create_akun;
         return `🌐 *${server.nama_server}*\n` +
-               `💰 Harga per hari: Rp${server.harga}\n` +
-               `📅 Harga per 30 hari: Rp${hargaPer30Hari}\n` +
+               `💰 Harga per hari: Rp${hargaPerHariTampilan}\n` + // Menggunakan harga yang disesuaikan
+               `📅 Harga per 30 hari: Rp${hargaPer30HariTampilan}\n` + // Menggunakan harga yang disesuaikan
                `📊 Quota: ${server.quota}GB\n` +
                `🔢 Limit IP: ${server.iplimit} IP\n` +
                (isFull ? `⚠️ *Server Penuh*` : `👥 Total Create Akun: ${server.total_create_akun}/${server.batas_create_akun}`);
@@ -1540,10 +1917,347 @@ async function startSelectServer(ctx, action, type, page = 0) {
   }
 }
 
+bot.command('unlimitedtrial', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) {
+    return ctx.reply('❌ Anda tidak memiliki izin.');
+  }
+
+  const args = ctx.message.text.split(' ');
+  if (args.length !== 2 || isNaN(args[1])) {
+    return ctx.reply('⚠️ Format salah. Gunakan: /unlimitedtrial <user_id>');
+  }
+
+  const targetUserId = parseInt(args[1]);
+
+  if (adminIds.includes(targetUserId)) {
+    return;
+  }
+
+  db.run('INSERT OR IGNORE INTO unlimited_trial_users (user_id) VALUES (?)', [targetUserId], function(err) {
+    if (err) {
+      logger.error('Gagal menambahkan user unlimited trial:', err.message);
+      return ctx.reply('❌ Gagal menambahkan user unlimited trial.');
+    }
+
+    ctx.reply(`✅ User \`${targetUserId}\` sekarang bisa trial tanpa batas.`, { parse_mode: 'Markdown' });
+  });
+});
+
+bot.command('listunlimitedtrial', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) return;
+
+  const page = 1;
+  showUnlimitedTrialPage(ctx, page);
+});
+
+bot.action(/^unlimitedtrial_(next|prev)_(\d+)$/, async (ctx) => {
+  const direction = ctx.match[1];
+  let page = parseInt(ctx.match[2]);
+
+  page = direction === 'next' ? page + 1 : page - 1;
+  if (page < 1) page = 1;
+
+  await ctx.answerCbQuery();
+  showUnlimitedTrialPage(ctx, page, ctx.callbackQuery.message.message_id);
+});
+
+function showUnlimitedTrialPage(ctx, page = 1, messageId = null) {
+  const limit = 10;
+  const offset = (page - 1) * limit;
+
+  db.all(`SELECT user_id FROM unlimited_trial_users ORDER BY user_id LIMIT ? OFFSET ?`, [limit, offset], (err, rows) => {
+    if (err) {
+      logger.error('❌ Gagal mengambil daftar unlimited trial:', err.message);
+      return ctx.reply('❌ Terjadi kesalahan.');
+    }
+
+    if (rows.length === 0) {
+      return ctx.reply('📭 Tidak ada data pengguna unlimited trial.');
+    }
+
+    const text = `📋 *Daftar User Unlimited Trial (Halaman ${page}):*\n\n` +
+      rows.map((row, i) => `${offset + i + 1}. \`${row.user_id}\``).join('\n');
+
+    db.get(`SELECT COUNT(*) AS total FROM unlimited_trial_users`, (err, countRow) => {
+      const total = countRow?.total || 0;
+      const totalPages = Math.ceil(total / limit);
+
+      const buttons = [];
+      if (page > 1) buttons.push({ text: '⏮️ Prev', callback_data: `unlimitedtrial_prev_${page}` });
+      if (page < totalPages) buttons.push({ text: 'Next ⏭️', callback_data: `unlimitedtrial_next_${page}` });
+
+      const replyOptions = {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: buttons.length ? [buttons] : []
+        }
+      };
+
+      if (messageId) {
+        ctx.telegram.editMessageText(ctx.chat.id, messageId, null, text, replyOptions).catch(() => {});
+      } else {
+        ctx.reply(text, replyOptions);
+      }
+    });
+  });
+}
+
+bot.command('removeunlimitedtrial', (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) return;
+
+  const args = ctx.message.text.split(' ');
+  if (args.length !== 2 || isNaN(args[1])) {
+    return ctx.reply('⚠️ Format salah. Gunakan: /removeunlimitedtrial <user_id>');
+  }
+
+  const targetId = parseInt(args[1]);
+
+  db.run('DELETE FROM unlimited_trial_users WHERE user_id = ?', [targetId], function (err) {
+    if (err) {
+      logger.error('❌ Gagal menghapus user dari unlimited trial:', err.message);
+      return ctx.reply('❌ Gagal menghapus user.');
+    }
+
+    if (this.changes === 0) {
+      return ctx.reply(`ℹ️ User \`${targetId}\` tidak ditemukan di daftar unlimited.`, { parse_mode: 'Markdown' });
+    }
+
+    ctx.reply(`✅ Izin trial unlimited untuk user \`${targetId}\` telah dicabut.`, { parse_mode: 'Markdown' });
+  });
+});
+
+// [UPDATE: Perintah /setreseller]
+bot.command('setreseller', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) {
+    return ctx.reply('⚠️ Anda tidak memiliki izin untuk menggunakan perintah ini.', { parse_mode: 'Markdown' });
+  }
+
+  const args = ctx.message.text.split(' ');
+  if (args.length !== 2) {
+    return ctx.reply('⚠️ Format salah. Gunakan: `/setreseller <user_id>`', { parse_mode: 'Markdown' });
+  }
+
+  const targetUserId = parseInt(args[1]);
+  if (isNaN(targetUserId)) {
+    return ctx.reply('⚠️ `user_id` harus berupa angka.', { parse_mode: 'Markdown' });
+  }
+
+  if (adminIds.includes(targetUserId)) {
+      return ctx.reply('⚠️ Tidak dapat mengubah role admin lain.', { parse_mode: 'Markdown' });
+  }
+
+  db.run("UPDATE users SET role = 'reseller' WHERE user_id = ?", [targetUserId], function(err) {
+    if (err) {
+      logger.error('❌ Kesalahan saat mengatur role reseller:', err.message);
+      return ctx.reply('❌ Kesalahan saat mengatur role reseller.', { parse_mode: 'Markdown' });
+    }
+    if (this.changes === 0) {
+      return ctx.reply('⚠️ Pengguna tidak ditemukan atau sudah menjadi reseller.', { parse_mode: 'Markdown' });
+    }
+    ctx.reply(`✅ Pengguna \`${targetUserId}\` berhasil diatur sebagai *Reseller*.`, { parse_mode: 'Markdown' });
+    bot.telegram.sendMessage(targetUserId, '🎉 Selamat! Akun Anda telah diupgrade menjadi *Reseller*! Nikmati harga khusus dan fitur reseller.', { parse_mode: 'Markdown' }).catch(e => logger.warn(`Gagal kirim notif reseller ke ${targetUserId}: ${e.message}`));
+  });
+});
+
+// [UPDATE: Perintah /unsetreseller]
+bot.command('unsetreseller', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) {
+    return ctx.reply('⚠️ Anda tidak memiliki izin untuk menggunakan perintah ini.', { parse_mode: 'Markdown' });
+  }
+
+  const args = ctx.message.text.split(' ');
+  if (args.length !== 2) {
+    return ctx.reply('⚠️ Format salah. Gunakan: `/unsetreseller <user_id>`', { parse_mode: 'Markdown' });
+  }
+
+  const targetUserId = parseInt(args[1]);
+  if (isNaN(targetUserId)) {
+    return ctx.reply('⚠️ `user_id` harus berupa angka.', { parse_mode: 'Markdown' });
+  }
+
+  if (adminIds.includes(targetUserId)) {
+      return ctx.reply('⚠️ Tidak dapat mengubah role admin lain.', { parse_mode: 'Markdown' });
+  }
+
+  db.run("UPDATE users SET role = 'member' WHERE user_id = ?", [targetUserId], function(err) {
+    if (err) {
+      logger.error('❌ Kesalahan saat mengatur role member:', err.message);
+      return ctx.reply('❌ Kesalahan saat mengatur role member.', { parse_mode: 'Markdown' });
+    }
+    if (this.changes === 0) {
+      return ctx.reply('⚠️ Pengguna tidak ditemukan atau sudah menjadi member.', { parse_mode: 'Markdown' });
+    }
+    ctx.reply(`✅ Pengguna \`${targetUserId}\` berhasil diubah menjadi *Member Biasa*.`, { parse_mode: 'Markdown' });
+    bot.telegram.sendMessage(targetUserId, '😔 Informasi: Role akun Anda telah diubah menjadi *Member Biasa*. Jika Anda merasa ini adalah kesalahan, silakan hubungi admin.', { parse_mode: 'Markdown' }).catch(e => logger.warn(`Gagal kirim notif member ke ${targetUserId}: ${e.message}`));
+  });
+});
+
+// [UPDATE: Perintah /listreseller]
+bot.action('listreseller', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) {
+    await ctx.answerCbQuery('❌ Anda tidak memiliki izin untuk melihat daftar reseller.', { show_alert: true });
+    return;
+  }
+  await ctx.answerCbQuery();
+  await sendPaginatedResellerList(ctx, 1);
+});
+
+bot.action(/^listreseller_(next|prev)_(\d+)$/, async (ctx) => {
+  const direction = ctx.match[1];
+  let page = parseInt(ctx.match[2]);
+
+  page = direction === 'next' ? page + 1 : page - 1;
+  if (page < 1) page = 1;
+
+  await ctx.answerCbQuery();
+  await sendPaginatedResellerList(ctx, page, ctx.callbackQuery.message.message_id);
+});
+
+// COMMAND: /listreseller
+// ✅ Command utama: hanya 1 versi
+bot.command('listreseller', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) {
+    return ctx.reply('❌ Anda tidak memiliki izin untuk menggunakan perintah ini.', { parse_mode: 'Markdown' });
+  }
+
+  logger.info(`[LISTRESELLER] Admin ${userId} meminta daftar reseller halaman 1`);
+  await sendPaginatedResellerList(ctx, 1);
+});
+
+// ✅ Navigasi tombol next/prev
+bot.action(/^listreseller_(next|prev)_(\d+)$/, async (ctx) => {
+  const direction = ctx.match[1];
+  let page = parseInt(ctx.match[2]);
+
+  page = direction === 'next' ? page + 1 : page - 1;
+  if (page < 1) page = 1;
+
+  await ctx.answerCbQuery();
+  logger.info(`[LISTRESELLER] Navigasi ke halaman ${page}`);
+  await sendPaginatedResellerList(ctx, page, ctx.callbackQuery.message.message_id);
+});
+
+async function sendPaginatedResellerList(ctx, page = 1, messageId = null) {
+  const limit = 10;
+  const offset = (page - 1) * limit;
+
+  try {
+    logger.info(`[LISTRESELLER] Query halaman ${page} (offset ${offset})`);
+
+    const resellers = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT user_id, saldo FROM users WHERE role = 'reseller' ORDER BY user_id LIMIT ? OFFSET ?`,
+        [limit, offset],
+        (err, rows) => (err ? reject(err) : resolve(rows))
+      );
+    });
+
+    const totalResellers = await new Promise((resolve, reject) => {
+      db.get(
+        `SELECT COUNT(*) AS count FROM users WHERE role = 'reseller'`,
+        (err, row) => (err ? reject(err) : resolve(row.count))
+      );
+    });
+
+    if (resellers.length === 0) {
+      const msg = '📭 Belum ada reseller terdaftar.';
+      return messageId
+        ? ctx.telegram.editMessageText(ctx.chat.id, messageId, null, msg)
+        : ctx.reply(msg);
+    }
+
+    let message = `👥 *Daftar Reseller (Halaman ${page}):*\n\n`;
+    for (const reseller of resellers) {
+      message += `🆔 \`${reseller.user_id}\`\n💰 Saldo: Rp${(reseller.saldo || 0).toLocaleString('id-ID')}\n\n`;
+    }
+
+    const totalPages = Math.ceil(totalResellers / limit);
+    const navButtons = [];
+
+    // Tampilkan tombol hanya kalau ada halaman berikut/previous
+    if (page > 1) {
+      navButtons.push({ text: '⬅️ Prev', callback_data: `listreseller_prev_${page}` });
+    }
+    if (page < totalPages) {
+      navButtons.push({ text: 'Next ➡️', callback_data: `listreseller_next_${page}` });
+    }
+
+    const replyOptions = {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: navButtons.length > 0 ? [navButtons] : []
+      }
+    };
+
+    if (messageId) {
+      try {
+        await ctx.telegram.editMessageText(ctx.chat.id, messageId, null, message, replyOptions);
+      } catch (e) {
+        logger.error('❌ Gagal editMessageText:', e.stack || e.message || e);
+        await ctx.reply(message, replyOptions);
+      }
+    } else {
+      await ctx.reply(message, replyOptions);
+    }
+
+  } catch (err) {
+    logger.error('❌ Gagal menampilkan daftar reseller:', err.stack || err.message || err);
+    await ctx.reply('❌ Terjadi kesalahan saat mengambil daftar reseller.');
+  }
+}
+
+// [UPDATE: Perintah /setdiskonreseller]
+bot.command('setdiskonreseller', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) {
+    return ctx.reply('⚠️ Anda tidak memiliki izin untuk menggunakan perintah ini.', { parse_mode: 'Markdown' });
+  }
+
+  const args = ctx.message.text.split(' ');
+  if (args.length !== 2 || isNaN(args[1]) || parseInt(args[1]) < 0 || parseInt(args[1]) > 100) {
+    return ctx.reply('⚠️ Format salah. Gunakan: `/setdiskonreseller <persen>` (angka antara 0-100)', { parse_mode: 'Markdown' });
+  }
+
+  const discountPercent = parseInt(args[1]);
+
+  db.run("UPDATE reseller_config SET discount_percent = ? WHERE id = 1", [discountPercent], function(err) {
+    if (err) {
+      logger.error('❌ Kesalahan saat mengatur diskon reseller:', err.message);
+      return ctx.reply('❌ Kesalahan saat mengatur diskon reseller.', { parse_mode: 'Markdown' });
+    }
+    ctx.reply(`✅ Diskon reseller berhasil diatur menjadi *${discountPercent}%*.`, { parse_mode: 'Markdown' });
+  });
+});
+
+// [UPDATE: Perintah /resetdiskonreseller]
+bot.command('resetdiskonreseller', async (ctx) => {
+  const userId = ctx.from.id;
+  if (!adminIds.includes(userId)) {
+    return ctx.reply('⚠️ Anda tidak memiliki izin untuk menggunakan perintah ini.', { parse_mode: 'Markdown' });
+  }
+
+  db.run("UPDATE reseller_config SET discount_percent = 0 WHERE id = 1", function(err) {
+    if (err) {
+      logger.error('❌ Kesalahan saat mereset diskon reseller:', err.message);
+      return ctx.reply('❌ Kesalahan saat mereset diskon reseller.', { parse_mode: 'Markdown' });
+    }
+    ctx.reply('✅ Diskon reseller berhasil direset menjadi *0%*.', { parse_mode: 'Markdown' });
+  });
+});
+
+
 bot.action(/navigate_(\w+)_(\w+)_(\d+)/, async (ctx) => {
   const [, action, type, page] = ctx.match;
   await startSelectServer(ctx, action, type, parseInt(page, 10));
 });
+
 bot.action(/^(create|renew|trial)_username_(vmess|vless|trojan|shadowsocks|ssh)_(.+)$/, async (ctx) => {
   await ctx.telegram.answerCbQuery(ctx.callbackQuery.id);
 
@@ -1561,7 +2275,6 @@ bot.action(/^(create|renew|trial)_username_(vmess|vless|trojan|shadowsocks|ssh)_
   const today = new Date().toISOString().split('T')[0];
 
   if (userId == ADMIN) {
-    
     return await handleTrial(ctx, type, serverId);
   }
 
@@ -1589,23 +2302,34 @@ bot.action(/^(create|renew|trial)_username_(vmess|vless|trojan|shadowsocks|ssh)_
 
       const trialCount = row?.count || 0;
 
-      if (trialCount >= 2) {
-        return ctx.reply('⚠️ *Kamu sudah trial hari ini, Gass Order* 😖', { parse_mode: 'Markdown' });
-      }
+      db.get('SELECT * FROM unlimited_trial_users WHERE user_id = ?', [userId], async (err, result) => {
+        if (err) {
+          logger.error('❌ Error cek unlimited trial:', err.message);
+          return ctx.reply('❌ Terjadi kesalahan saat memeriksa hak trial.', { parse_mode: 'Markdown' });
+        }
 
-      await handleTrial(ctx, type, serverId);
+        const isUnlimited = result != null;
 
-      const newCount = trialCount + 1;
-      db.run(`
-        INSERT INTO TrialLog (user_id, date, count)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id, date) DO UPDATE SET count = ?
-      `, [userId, today, newCount, newCount]);
+        if (!isUnlimited && trialCount >= 2) {
+          return ctx.reply('⚠️ *Kamu sudah trial hari ini, Gass Order* 😖', { parse_mode: 'Markdown' });
+        }
+
+        await handleTrial(ctx, type, serverId);
+
+        if (!isUnlimited) {
+          const newCount = trialCount + 1;
+          db.run(`
+            INSERT INTO TrialLog (user_id, date, count)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, date) DO UPDATE SET count = ?
+          `, [userId, today, newCount, newCount]);
+        }
+      });
     });
-  });  
+  });
 
   } else {
-  	
+
     userState[ctx.chat.id] = { step: `username_${action}_${type}`, serverId, type, action };
 
     db.get('SELECT batas_create_akun, total_create_akun FROM Server WHERE id = ?', [serverId], async (err, server) => {
@@ -1672,180 +2396,261 @@ function kaburMark(text) {
   return text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
 }
 
-async function showLoading(ctx, durasi = 20000) {
-  const waitMsg = await ctx.reply("⏳ Loading");
+async function showLoading(ctx) {
+  const waitMsg = await ctx.reply("⏳ Mohon menunggu.");
 
-  const dots = [".", "..", "...", "....", " "];
+  const dots = [".", "..", "...", " "];
   let i = 0;
 
-  const interval = setInterval(async () => {
+  const intervalId = setInterval(async () => {
     i = (i + 1) % dots.length;
     try {
       await ctx.telegram.editMessageText(
         ctx.chat.id,
         waitMsg.message_id,
         null,
-        `⏳ Loading${dots[i]}`
+        `⏳ Mohon menunggu${dots[i]}`
       );
     } catch (e) {
-      clearInterval(interval);
+      clearInterval(intervalId);
     }
   }, 1000);
 
-  await new Promise(resolve => setTimeout(resolve, durasi));
-  clearInterval(interval);
-
-  return waitMsg;
+  return { messageId: waitMsg.message_id, intervalId: intervalId };
 }
 
-
-
 bot.on('text', async (ctx, next) => {
-  const userId = ctx.from.id;
-  const teks = ctx.message?.text?.trim();
-  const state = userState[userId];
+    const userId = ctx.from.id;
+    const teks = ctx.message?.text?.trim();
+    const state = userState[userId];
 
-  if (typeof teks !== 'string' || teks.length === 0) {
-    return;
-  }
-
-  if (teks.startsWith('/')) {
-    return next();
-  }
-  
-  console.log(`📩 Input dari ${userId}: ${ctx.message.text}`);
-  logger.info(`📩 Input teks dari ${userId}: ${ctx.message.text}`);
-
-  // ✅ Tangani input nominal topup Saweria dulu
-  if (global.depositState && global.depositState[userId]?.action === 'request_amount_saweria') {
-    const input = ctx.message.text.trim();
-    const nominal = parseInt(input.replace(/[^\d]/g, ''), 10);
-
-    if (isNaN(nominal) || nominal < 100) {
-      return ctx.reply('❌ *Nominal tidak valid. Minimal Rp100.*', { parse_mode: 'Markdown' });
+    if (typeof teks !== 'string' || teks.length === 0) {
+        return;
     }
 
-    delete global.depositState[userId]; // hapus state
-    await ctx.reply(`⏳ Memproses QRIS Saweria untuk Rp${nominal}...`);
-    await processDepositSaweria(ctx, nominal);
-    return;
-  }
-
-  // 👤 Input username untuk sewa script
-  if (state && state.step === 'sewascript_create_input') {
-    const username = ctx.message.text.trim();
-
-    if (!/^[a-zA-Z0-9]{3,20}$/.test(username)) {
-      return ctx.reply('❌ *Username tidak valid. Harus 3-20 karakter alfanumerik.*', { parse_mode: 'Markdown' });
+    if (teks.startsWith('/')) {
+        return next();
     }
 
-    userState[userId] = {
-      step: 'sewascript_create_input_ip',
-      username,
-      bulan: state.bulan
-    };
+    console.log(`📩 Input dari ${userId}: ${ctx.message.text}`);
+    logger.info(`📩 Input teks dari ${userId}: ${ctx.message.text}`);
 
-    await ctx.reply('🏷️ *Masukkan IP Address:*', { parse_mode: 'Markdown' });
-    return;
-  }
+    if (global.depositState && global.depositState[userId]?.action === 'request_amount_saweria') {
+        const input = ctx.message.text.trim();
+        const nominal = parseInt(input.replace(/[^\d]/g, ''), 10);
 
-  // 🌐 Input IP Address untuk daftar script
-  if (state && state.step === 'sewascript_create_input_ip') {
-    const ip = ctx.message.text.trim();
-    const { username, bulan } = state;
-
-    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
-      return ctx.reply('❌ *Format IP tidak valid.* Masukkan IP seperti 123.45.67.89', { parse_mode: 'Markdown' });
-    }
-
-    const priceharga = 10000 * bulan;
-
-    db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], async (err, user) => {
-      if (err || !user) {
-        return ctx.reply('❌ Terjadi kesalahan mengambil saldo pengguna.', { parse_mode: 'Markdown' });
-      }
-
-      if (user.saldo < priceharga) {
-        return ctx.reply('❌ *Saldo Anda tidak cukup.*', { parse_mode: 'Markdown' });
-      }
-
-      const { exec } = require('child_process');
-      const cmd = `/usr/local/sbin/xwanregis ${username} ${bulan} ${ip}`;
-      const { waitMsg, interval } = await showLoading(ctx);
-
-      exec(cmd, async (error, stdout, stderr) => {
-        clearInterval(interval);
-
-        const output = error || /gagal|error/i.test(stdout)
-          ? `❌ Gagal daftar script:\n\n${stdout || stderr}`
-          : `✅ Pendaftaran IP Berhasil:\n${stdout}`;
-
-        try {
-          await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, output, { parse_mode: 'HTML' });
-        } catch (e) {
-          await ctx.reply(output, { parse_mode: 'HTML' });
+        if (isNaN(nominal) || nominal < 100) {
+            return ctx.reply('❌ *Nominal tidak valid. Minimal Rp100.*', { parse_mode: 'Markdown' });
         }
 
-        if (!error && !/gagal|error/i.test(stdout)) {
-          db.run('UPDATE users SET saldo = saldo - ? WHERE user_id = ?', [priceharga, userId]);
-        }
-      });
-    });
+        delete global.depositState[userId];
+        await ctx.reply(`⏳ Memproses QRIS Saweria untuk Rp${nominal}...`);
+        await processDepositSaweria(ctx, nominal);
+        return;
+    }
 
-       delete userState[userId];
-       return;
+    if (state && state.step === 'sewascript_create_input') {
+        const username = ctx.message.text.trim();
+
+        if (!/^[a-zA-Z0-9]{3,20}$/.test(username)) {
+            return ctx.reply('❌ *Username tidak valid. Harus 3-20 karakter alfanumerik.*', { parse_mode: 'Markdown' });
+        }
+
+        userState[userId] = {
+            step: 'sewascript_create_input_ip',
+            username,
+            bulan: state.bulan
+        };
+
+        await ctx.reply('🏷️ *Masukkan IP Address:*', { parse_mode: 'Markdown' });
+        return;
+    }
+
+    if (state && state.step === 'sewascript_create_input_ip') {
+        const ip = ctx.message.text.trim();
+        const { username, bulan } = state;
+
+        if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+            return ctx.reply('❌ *Format IP tidak valid.* Masukkan IP seperti 123.45.67.89', { parse_mode: 'Markdown' });
+        }
+
+        const priceharga = 10000 * bulan;
+
+        db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], async (err, user) => {
+            if (err || !user) {
+                logger.error(`Error mengambil saldo user ${userId} untuk sewa script:`, err?.message);
+                return ctx.reply('❌ Terjadi kesalahan mengambil saldo pengguna.', { parse_mode: 'Markdown' });
+            }
+
+            if (user.saldo < priceharga) {
+                logger.warn(`Saldo user ${userId} tidak cukup (Rp${user.saldo}) untuk sewa script Rp${priceharga}`);
+                return ctx.reply('❌ *Saldo Anda tidak cukup.*', { parse_mode: 'Markdown' });
+            }
+
+            const { exec } = require('child_process');
+            const cmd = `/usr/local/sbin/xwanregis ${username} ${bulan} ${ip}`;
+            logger.info(`Menjalankan perintah sewa script untuk user ${userId}: ${cmd}`);
+            const loadingState = await showLoading(ctx);
+            const waitMsgId = loadingState.messageId;
+            const intervalId = loadingState.intervalId;
+
+            let outputMessage;
+            let successScriptAction = false;
+
+            try {
+                const { error, stdout, stderr } = await new Promise((resolve) => {
+                    exec(cmd, (error, stdout, stderr) => {
+                        resolve({ error, stdout, stderr });
+                    });
+                });
+
+                if (error) {
+                    logger.error(`Error saat eksekusi literegis untuk user ${userId}:`, error.message);
+                    outputMessage = `❌ Gagal daftar script:\n\n${stderr || error.message}`;
+                } else if (/gagal|error/i.test(stdout)) {
+                    logger.warn(`Literegis mengembalikan pesan gagal untuk user ${userId}:\n${stdout}`);
+                    outputMessage = `❌ Gagal daftar script:\n\n${stdout}`;
+                } else {
+                    successScriptAction = true;
+                    outputMessage = `✅ Pendaftaran IP Berhasil:\n${stdout}`;
+                    logger.info(`✅ Literegis berhasil untuk user ${userId}`);
+                }
+            } catch (e) {
+                logger.error(`Exception saat menjalankan literegis untuk user ${userId}:`, e.message);
+                outputMessage = `❌ Terjadi kesalahan internal saat memproses pendaftaran script. Silakan coba lagi nanti.`;
+            } finally {
+                clearInterval(intervalId);
+                try {
+                    await ctx.telegram.deleteMessage(ctx.chat.id, waitMsgId);
+                } catch (e) {
+                    logger.warn(`Gagal menghapus pesan loading untuk user ${userId}: ${e.message}`);
+                }
+            }
+
+            try {
+                await ctx.reply(outputMessage, { parse_mode: 'HTML' });
+            } catch (e) {
+                logger.error(`Gagal mengirim pesan hasil sewa script untuk user ${userId}:`, e.message);
+            }
+
+            if (successScriptAction) {
+                db.run('UPDATE users SET saldo = saldo - ? WHERE user_id = ?', [priceharga, userId], (errUpdateSaldo) => {
+                    if (errUpdateSaldo) {
+                        logger.error('⚠️ Kesalahan saat mengurangi saldo pengguna untuk sewa script (setelah sukses):', errUpdateSaldo.message);
+                        bot.telegram.sendMessage(ADMIN, `🚨 *PERHATIAN: SALDO GAGAL DIKURANGI SETELAH SEWA SCRIPT SUKSES!*
+User ID: \`${userId}\`
+Username TG: \`@${ctx.from.username || 'N/A'}\`
+Jenis: Sewa Script
+Jumlah: Rp${priceharga.toLocaleString('id-ID')}
+Pesan Error: ${errUpdateSaldo.message}
+*SCRIPT MUNGKIN SUDAH TERDAFTAR TAPI SALDO BELUM TERPOTONG!*`, { parse_mode: 'Markdown' }).catch(e => logger.error("Gagal kirim notif darurat:", e.message));
+                    } else {
+                        logger.info(`✅ Saldo Rp${priceharga} berhasil dikurangi untuk user ${userId} (Sewa Script berhasil)`);
+                    }
+                });
+            } else {
+                logger.info(`⚠️ Saldo user ${userId} TIDAK dikurangi karena sewa script gagal.`);
+            }
+        });
+
+        delete userState[userId];
+        return;
     }
 
     if (state && state.step === 'sewascript_perpanjang_ip_manual') {
-    const ip = ctx.message.text.trim();
-    const bulan = state.bulan;
+        const ip = ctx.message.text.trim();
+        const bulan = state.bulan;
 
-    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
-        return ctx.reply('❌ *Format IP tidak valid.* Masukkan IP seperti 123.45.67.89', { parse_mode: 'Markdown' });
-    }
-
-    const priceharga = 10000 * bulan;
-
-    db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], async (err, user) => {
-        if (err || !user) {
-            return ctx.reply('❌ Terjadi kesalahan mengambil saldo pengguna.', { parse_mode: 'Markdown' });
+        if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+            return ctx.reply('❌ *Format IP tidak valid.* Masukkan IP seperti 123.45.67.89', { parse_mode: 'Markdown' });
         }
 
-        if (user.saldo < priceharga) {
-            return ctx.reply('❌ *Saldo Anda tidak cukup untuk memperpanjang.*', { parse_mode: 'Markdown' });
-        }
+        const priceharga = 10000 * bulan;
 
-        const { exec } = require('child_process');
-        const jumlahHari = bulan * 30;
-        const cmd = `/usr/local/sbin/xwanextend ${ip} ${jumlahHari}`;
+        db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], async (err, user) => {
+            if (err || !user) {
+                logger.error(`Error mengambil saldo user ${userId} untuk perpanjang script:`, err?.message);
+                return ctx.reply('❌ Terjadi kesalahan mengambil saldo pengguna.', { parse_mode: 'Markdown' });
+            }
 
-        const { waitMsg, interval } = await showLoading(ctx);
+            if (user.saldo < priceharga) {
+                logger.warn(`Saldo user ${userId} tidak cukup (Rp${user.saldo}) untuk perpanjang script Rp${priceharga}`);
+                return ctx.reply('❌ *Saldo Anda tidak cukup untuk memperpanjang.*', { parse_mode: 'Markdown' });
+            }
 
-        exec(cmd, async (error, stdout, stderr) => {
-            clearInterval(interval);
+            const { exec } = require('child_process');
+            const jumlahHari = bulan * 30;
+            const cmd = `/usr/local/sbin/xwanextend ${ip} ${jumlahHari}`;
+            logger.info(`Menjalankan perintah perpanjang script untuk user ${userId}: ${cmd}`);
+            const loadingState = await showLoading(ctx);
+            const waitMsgId = loadingState.messageId;
+            const intervalId = loadingState.intervalId;
 
-            const output = error || /gagal|error/i.test(stdout)
-            ? `❌ Gagal memperpanjang script:\n\n${stdout || stderr}`
-            : `✅ Perpanjangan IP Berhasil:\n${stdout}`;
+            let outputMessage;
+            let successScriptAction = false;
 
             try {
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, output, { parse_mode: 'HTML' });
+                const { error, stdout, stderr } = await new Promise((resolve) => {
+                    exec(cmd, (error, stdout, stderr) => {
+                        resolve({ error, stdout, stderr });
+                    });
+                });
+
+                if (error) {
+                    logger.error(`Error saat eksekusi liteextend untuk user ${userId}:`, error.message);
+                    outputMessage = `❌ Gagal memperpanjang script:\n\n${stderr || error.message}`;
+                } else if (/gagal|error/i.test(stdout)) {
+                    logger.warn(`Liteextend mengembalikan pesan gagal untuk user ${userId}:\n${stdout}`);
+                    outputMessage = `❌ Gagal memperpanjang script:\n\n${stdout}`;
+                } else {
+                    successScriptAction = true;
+                    outputMessage = `✅ Perpanjangan IP Berhasil:\n${stdout}`;
+                    logger.info(`✅ Liteextend berhasil untuk user ${userId}`);
+                }
             } catch (e) {
-                await ctx.reply(output, { parse_mode: 'HTML' });
+                logger.error(`Exception saat menjalankan liteextend untuk user ${userId}:`, e.message);
+                outputMessage = `❌ Terjadi kesalahan internal saat memproses perpanjangan script. Silakan coba lagi nanti.`;
+            } finally {
+                clearInterval(intervalId);
+                try {
+                    await ctx.telegram.deleteMessage(ctx.chat.id, waitMsgId);
+                } catch (e) {
+                    logger.warn(`Gagal menghapus pesan loading untuk user ${userId}: ${e.message}`);
+                }
             }
 
-            if (!error && !/gagal|error/i.test(stdout)) {
-                db.run('UPDATE users SET saldo = saldo - ? WHERE user_id = ?', [priceharga, userId]);
+            try {
+                await ctx.reply(outputMessage, { parse_mode: 'HTML' });
+            } catch (e) {
+                logger.error(`Gagal mengirim pesan hasil perpanjang script untuk user ${userId}:`, e.message);
+            }
+
+            if (successScriptAction) {
+                db.run('UPDATE users SET saldo = saldo - ? WHERE user_id = ?', [priceharga, userId], (errUpdateSaldo) => {
+                    if (errUpdateSaldo) {
+                        logger.error('⚠️ Kesalahan saat mengurangi saldo pengguna untuk perpanjang script (setelah sukses):', errUpdateSaldo.message);
+                        bot.telegram.sendMessage(ADMIN, `🚨 *PERHATIAN: SALDO GAGAL DIKURANGI SETELAH PERPANJANG SCRIPT SUKSES!*
+User ID: \`${userId}\`
+Username TG: \`@${ctx.from.username || 'N/A'}\`
+Jenis: Perpanjang Script
+Jumlah: Rp${priceharga.toLocaleString('id-ID')}
+Pesan Error: ${errUpdateSaldo.message}
+*SCRIPT MUNGKIN SUDAH DIPERPANJANG TAPI SALDO BELUM TERPOTONG!*`, { parse_mode: 'Markdown' }).catch(e => logger.error("Gagal kirim notif darurat:", e.message));
+                    } else {
+                        logger.info(`✅ Saldo Rp${priceharga} berhasil dikurangi untuk user ${userId} (Perpanjang Script berhasil)`);
+                    }
+                });
+            } else {
+                logger.info(`⚠️ Saldo user ${userId} TIDAK dikurangi karena perpanjang script gagal.`);
             }
         });
-    });
 
         delete userState[userId];
         return;
     }
 
     if (state && state.step === 'atur_bonus_input') {
-        const [status, minStr, persenStr] = ctx.message.text.trim().split(/\s+/); 
+        const [status, minStr, persenStr] = ctx.message.text.trim().split(/\s+/);
         const min = parseInt(minStr, 10);
         const persen = parseInt(persenStr, 10);
 
@@ -1910,7 +2715,7 @@ bot.on('text', async (ctx, next) => {
         if (/[^a-zA-Z0-9]/.test(state.password)) {
             return ctx.reply('❌ *Password tidak boleh mengandung karakter khusus atau spasi.*', { parse_mode: 'Markdown' });
         }
-        userState[userId].step = `exp_${state.action}_${state.type}`; 
+        userState[userId].step = `exp_${state.action}_${state.type}`;
         await ctx.reply('⏳ *Masukkan masa aktif (hari):*', { parse_mode: 'Markdown' });
         return;
     }
@@ -1929,7 +2734,7 @@ bot.on('text', async (ctx, next) => {
         }
         state.exp = exp;
 
-        db.get('SELECT quota, iplimit, harga FROM Server WHERE id = ?', [state.serverId], async (err, server) => {
+        db.get('SELECT quota, iplimit, harga, nama_server, domain FROM Server WHERE id = ?', [state.serverId], async (err, server) => {
             if (err) {
                 logger.error('⚠️ Error fetching server details:', err.message);
                 return ctx.reply('❌ *Terjadi kesalahan saat mengambil detail server.*', { parse_mode: 'Markdown' });
@@ -1940,7 +2745,24 @@ bot.on('text', async (ctx, next) => {
             }
 
             const harga = server.harga;
-            const totalHarga = harga * state.exp;
+            let totalHarga = harga * state.exp;
+
+            const userRole = await new Promise((resolve) => {
+                db.get('SELECT role FROM users WHERE user_id = ?', [userId], (err, row) => {
+                    resolve(row ? row.role : 'member');
+                });
+            });
+
+            let resellerDiscount = 0;
+            if (userRole === 'reseller') {
+                resellerDiscount = await new Promise((resolve) => {
+                    db.get('SELECT discount_percent FROM reseller_config WHERE id = 1', (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row ? row.discount_percent : 0);
+                    });
+                });
+                totalHarga = Math.floor(totalHarga * (100 - resellerDiscount) / 100);
+            }
 
             db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], async (err, user) => {
                 if (err) {
@@ -1956,81 +2778,94 @@ bot.on('text', async (ctx, next) => {
 
                 if (saldo < totalHarga) {
                     delete userState[userId];
-                    return ctx.reply('❌ *Saldo Anda tidak mencukupi untuk melakukan transaksi ini.*', { parse_mode: 'Markdown' });
+                    return ctx.reply(`❌ *Saldo Anda tidak mencukupi untuk melakukan transaksi ini. Saldo Anda: Rp${saldo.toLocaleString('id-ID')}, Harga: Rp${totalHarga.toLocaleString('id-ID')}*`, { parse_mode: 'Markdown' });
                 }
 
                 let msg;
                 let successAction = false;
+                let actionTypeLabel = '';
+                const loadingState = await showLoading(ctx);
+                const waitMsgId = loadingState.messageId;
+                const intervalId = loadingState.intervalId;
 
-                // Pastikan actionTypeLabel dideklarasikan di sini atau di scope yang lebih tinggi
-                let actionTypeLabel = ''; 
-
-                if (state.action === 'create') {
-                    actionTypeLabel = 'Buat Akun'; // Didefinisikan di sini
-                    try { // Menambahkan try...catch di sini
+                try {
+                    logger.info(`Mencoba ${state.action} ${state.type} untuk user ${userId} di server ${server.nama_server}`);
+                    if (state.action === 'create') {
+                        actionTypeLabel = 'Buat Akun';
                         switch (state.type) {
                             case 'vmess': msg = await createvmess(state.username, exp, server.quota, server.iplimit, state.serverId); break;
                             case 'vless': msg = await createvless(state.username, exp, server.quota, server.iplimit, state.serverId); break;
                             case 'trojan': msg = await createtrojan(state.username, exp, server.quota, server.iplimit, state.serverId); break;
                             case 'shadowsocks': msg = await createshadowsocks(state.username, exp, server.quota, server.iplimit, state.serverId); break;
                             case 'ssh': msg = await createssh(state.username, state.password, exp, server.iplimit, state.serverId); break;
+                            default: msg = '❌ *Tipe layanan tidak dikenali.*'; break;
                         }
-                        if (msg && !msg.toLowerCase().includes('gagal') && !msg.toLowerCase().includes('error')) {
-                            successAction = true;
-                        } else {
-                            // Jika msg null/undefined atau mengandung "gagal"/"error", anggap gagal
-                            logger.error(`Aksi pembuatan akun ${state.type} mengembalikan pesan gagal: ${msg}`);
-                        }
-                    } catch (e) {
-                        logger.error(`Error saat memanggil fungsi pembuatan akun ${state.type}:`, e.message);
-                        msg = 'Terjadi kesalahan internal saat membuat akun.';
-                        successAction = false; // Pastikan ini false jika ada exception
-                    }
-                } else if (state.action === 'renew') {
-                    actionTypeLabel = 'Perpanjang Akun'; // Didefinisikan di sini
-                    try { // Menambahkan try...catch di sini
+                    } else if (state.action === 'renew') {
+                        actionTypeLabel = 'Perpanjang Akun';
                         switch (state.type) {
                             case 'vmess': msg = await renewvmess(state.username, exp, server.quota, server.iplimit, state.serverId); break;
                             case 'vless': msg = await renewvless(state.username, exp, server.quota, server.iplimit, state.serverId); break;
                             case 'trojan': msg = await renewtrojan(state.username, exp, server.quota, server.iplimit, state.serverId); break;
                             case 'shadowsocks': msg = await renewshadowsocks(state.username, exp, server.quota, server.iplimit, state.serverId); break;
                             case 'ssh': msg = await renewssh(state.username, exp, server.iplimit, state.serverId); break;
+                            default: msg = '❌ *Tipe layanan tidak dikenali.*'; break;
                         }
-                        if (msg && !msg.toLowerCase().includes('gagal') && !msg.toLowerCase().includes('error')) {
-                            successAction = true;
-                        } else {
-                            // Jika msg null/undefined atau mengandung "gagal"/"error", anggap gagal
-                            logger.error(`Aksi perpanjangan akun ${state.type} mengembalikan pesan gagal: ${msg}`);
-                        }
+                    }
+
+                    if (msg && typeof msg === 'string' && !msg.toLowerCase().includes('gagal') && !msg.toLowerCase().includes('error')) {
+                        successAction = true;
+                        logger.info(`✅ Aksi ${actionTypeLabel} ${state.type} berhasil untuk user ${userId}.`);
+                    } else {
+                        logger.warn(`Aksi ${actionTypeLabel} ${state.type} mengembalikan pesan gagal/error untuk user ${userId}: ${msg}`);
+                        msg = msg || `❌ Gagal ${actionTypeLabel} akun. Mohon coba lagi atau hubungi admin.`;
+                    }
+                } catch (e) {
+                    logger.error(`Error saat memanggil fungsi ${actionTypeLabel} akun ${state.type} untuk user ${userId}:`, e.message);
+                    msg = '❌ Terjadi kesalahan internal saat memproses akun Anda. Mohon coba lagi nanti.';
+                    successAction = false;
+                } finally {
+                    clearInterval(intervalId);
+                    try {
+                        await ctx.telegram.deleteMessage(ctx.chat.id, waitMsgId);
                     } catch (e) {
-                        logger.error(`Error saat memanggil fungsi perpanjangan akun ${state.type}:`, e.message);
-                        msg = 'Terjadi kesalahan internal saat memperpanjang akun.';
-                        successAction = false; // Pastikan ini false jika ada exception
+                        logger.warn(`Gagal menghapus pesan loading untuk user ${userId}: ${e.message}`);
                     }
                 }
 
                 if (!successAction) {
                     delete userState[userId];
-                    return ctx.reply('❌ *Pembuatan/Renew akun gagal. Saldo tidak dipotong.*', { parse_mode: 'Markdown' });
+                    return ctx.reply(msg, { parse_mode: 'Markdown' });
                 }
 
-                // Saldo dikurangi
                 db.run('UPDATE users SET saldo = saldo - ? WHERE user_id = ?', [totalHarga, userId], (err) => {
                     if (err) {
-                        logger.error('⚠️ Kesalahan saat mengurangi saldo pengguna:', err.message);
-                        // Pertimbangkan apa yang harus dilakukan jika pengurangan saldo gagal setelah successAction = true
-                        // Mungkin perlu mekanisme rollback atau notifikasi khusus.
-                    }
-                });
-                    
-                // total_create_akun ditambah
-                db.run('UPDATE Server SET total_create_akun = total_create_akun + 1 WHERE id = ?', [state.serverId], (err) => {
-                    if (err) {
-                        logger.error('⚠️ Kesalahan saat menambahkan total_create_akun:', err.message);
+                        logger.error('⚠️ Kesalahan saat mengurangi saldo pengguna (setelah sukses API):', err.message);
+                        bot.telegram.sendMessage(ADMIN, `🚨 *PERHATIAN: SALDO GAGAL DIKURANGI!*
+User ID: \`${userId}\`
+Username TG: \`@${ctx.from.username || 'N/A'}\`
+Produk: ${state.type.toUpperCase()}
+Jenis: ${actionTypeLabel}
+Jumlah: Rp${totalHarga.toLocaleString('id-ID')}
+Pesan Error: ${err.message}
+*AKUN MUNGKIN SUDAH TERBUAT TAPI SALDO BELUM TERPOTONG!*`, { parse_mode: 'Markdown' }).catch(e => logger.error("Gagal kirim notif darurat:", e.message));
+
+                    } else {
+                        logger.info(`✅ Saldo Rp${totalHarga} berhasil dikurangi untuk user ${userId} (${actionTypeLabel} ${state.type})`);
                     }
                 });
 
-                // Catat log penjualan
+                db.run('UPDATE Server SET total_create_akun = total_create_akun + 1 WHERE id = ?', [state.serverId], (err) => {
+                    if (err) {
+                        logger.error('⚠️ Kesalahan saat menambahkan total_create_akun (setelah sukses API):', err.message);
+                    }
+                });
+
+                const userRoleForLog = await new Promise((resolve) => {
+                    db.get('SELECT role FROM users WHERE user_id = ?', [userId], (err, row) => {
+                        resolve(row ? row.role : 'member');
+                    });
+                });
+
                 db.run(`INSERT INTO log_penjualan (
                     user_id,
                     username,
@@ -2039,40 +2874,42 @@ bot.on('text', async (ctx, next) => {
                     harga,
                     masa_aktif_hari,
                     waktu_transaksi,
-                    action_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+                    action_type,
+                    user_role
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
                     ctx.from.id,
                     ctx.from.username || '',
                     server.nama_server || 'Unknown',
                     state.type,
-                    totalHarga, 
+                    totalHarga,
                     state.exp,
                     new Date().toISOString(),
-                    state.action 
+                    state.action,
+                    userRoleForLog
                 ], (err) => {
                     if (err) {
-                        logger.warn('⚠️ Gagal mencatat log penjualan:', err.message);
+                        logger.warn('⚠️ Gagal mencatat log penjualan (setelah sukses API):', err.message);
                     } else {
-                        logger.info(`✅ Log penjualan dicatat: ${ctx.from.id} - ${state.type} - ${state.action} - Rp${totalHarga}`);
+                        logger.info(`✅ Log penjualan dicatat: ${ctx.from.id} - ${state.type} - ${state.action} - Rp${totalHarga} - Role: ${userRoleForLog}`);
                     }
                 });
 
-                // === Panggil afterAccountTransaction di sini ===
                 await afterAccountTransaction({
                     userId: userId,
-                    username: ctx.from.username, 
+                    username: ctx.from.username,
                     produk: state.type.toUpperCase(),
                     serverId: state.serverId,
                     jenis: actionTypeLabel,
-                    durasi: state.exp
+                    durasi: state.exp,
+                    accountUsername: state.username
                 });
 
                 await ctx.reply(msg, { parse_mode: 'Markdown' });
                 delete userState[userId];
-             }); 
-         }); 
-        return; 
-    } 
+            });
+        });
+        return;
+    }
 
     if (state && state.step === 'addserver') {
         const domain = ctx.message.text.trim();
@@ -2162,7 +2999,7 @@ bot.on('text', async (ctx, next) => {
         }
 
         try {
-        	
+
             const targetUserId = state.userId;
             const changes = await new Promise((resolve, reject) => {
                 db.run('UPDATE users SET saldo = saldo + ? WHERE user_id = ?', [amount, targetUserId], function(err) {
@@ -2297,6 +3134,7 @@ bot.on('text', async (ctx, next) => {
     }
 });
 
+
 bot.action('addserver', async (ctx) => {
   try {
     logger.info('📥 Proses tambah server dimulai');
@@ -2312,7 +3150,7 @@ bot.action('detailserver', async (ctx) => {
   try {
     logger.info('📋 Proses detail server dimulai');
     await ctx.answerCbQuery();
-    
+
     const servers = await new Promise((resolve, reject) => {
       db.all('SELECT * FROM Server', [], (err, servers) => {
         if (err) {
@@ -2358,7 +3196,27 @@ bot.action('listserver', async (ctx) => {
   try {
     logger.info('📜 Proses daftar server dimulai');
     await ctx.answerCbQuery();
-    
+
+    // Ambil role user dan diskon reseller
+    const userId = ctx.from.id;
+    const userRole = await new Promise((resolve, reject) => {
+        db.get('SELECT role FROM users WHERE user_id = ?', [userId], (err, row) => {
+            if (err) reject(err);
+            else resolve(row ? row.role : 'member');
+        });
+    });
+
+    let resellerDiscount = 0;
+    if (userRole === 'reseller') {
+        resellerDiscount = await new Promise((resolve, reject) => {
+            db.get('SELECT discount_percent FROM reseller_config WHERE id = 1', (err, row) => {
+                if (err) reject(err);
+                else resolve(row ? row.discount_percent : 0);
+            });
+        });
+    }
+    // End of reseller discount fetch
+
     const servers = await new Promise((resolve, reject) => {
       db.all('SELECT * FROM Server', [], (err, servers) => {
         if (err) {
@@ -2376,7 +3234,19 @@ bot.action('listserver', async (ctx) => {
 
     let serverList = '📜 *Daftar Server* 📜\n\n';
     servers.forEach((server, index) => {
-      serverList += `🔹 ${index + 1}. ${server.domain}\n`;
+      let hargaPerHariTampilan = server.harga;
+      // Terapkan diskon untuk tampilan jika user adalah reseller
+      if (userRole === 'reseller' && resellerDiscount > 0) {
+          hargaPerHariTampilan = Math.floor(server.harga * (100 - resellerDiscount) / 100);
+      }
+      const hargaPer30HariTampilan = hargaPerHariTampilan * 30;
+
+      serverList += `🌐 *${server.nama_server}*\n` +
+                    `💰 Harga per hari: Rp${hargaPerHariTampilan}\n` + // Menggunakan harga yang disesuaikan
+                    `📅 Harga per 30 hari: Rp${hargaPer30HariTampilan}\n` + // Menggunakan harga yang disesuaikan
+                    `📊 Quota: ${server.quota}GB\n` +
+                    `🔢 Limit IP: ${server.iplimit} IP\n` +
+                    `👥 Total Create Akun: ${server.total_create_akun}/${server.batas_create_akun}\n\n`;
     });
 
     serverList += `\nTotal Jumlah Server: ${servers.length}`;
@@ -2437,7 +3307,7 @@ bot.action('deleteserver', async (ctx) => {
   try {
     logger.info('🗑️ Proses hapus server dimulai');
     await ctx.answerCbQuery();
-    
+
     db.all('SELECT * FROM Server', [], (err, servers) => {
       if (err) {
         logger.error('⚠️ Kesalahan saat mengambil daftar server:', err.message);
@@ -2470,7 +3340,7 @@ bot.action('deleteserver', async (ctx) => {
 bot.action('cek_saldo', async (ctx) => {
   try {
     const userId = ctx.from.id;
-    
+
     const row = await new Promise((resolve, reject) => {
       db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], (err, row) => {
         if (err) {
@@ -2482,19 +3352,19 @@ bot.action('cek_saldo', async (ctx) => {
     });
 
     if (row) {
-      await ctx.reply(`📊 *Cek Saldo*\n\n🆔 ID Telegram: ${userId}\n💰 Sisa Saldo: Rp${row.saldo}`, 
-      { 
-        parse_mode: 'Markdown', 
+      await ctx.reply(`📊 *Cek Saldo*\n\n🆔 ID Telegram: ${userId}\n💰 Sisa Saldo: Rp${row.saldo}`,
+      {
+        parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
             [{ text: '💸 Top Up', callback_data: 'menu_topup' }, { text: '📝 Menu Utama', callback_data: 'send_main_menu' }]
           ]
-        } 
+        }
       });
     } else {
       await ctx.reply('⚠️ *Anda belum memiliki saldo. Silahkan tambahkan saldo terlebih dahulu.*', { parse_mode: 'Markdown' });
     }
-    
+
   } catch (error) {
     logger.error('❌ Kesalahan saat memeriksa saldo:', error);
     await ctx.reply(`❌ *${error.message}*`, { parse_mode: 'Markdown' });
@@ -2650,7 +3520,7 @@ bot.action(/next_users_(\d+)/, async (ctx) => {
 
 bot.action(/prev_users_(\d+)/, async (ctx) => {
   const currentPage = parseInt(ctx.match[1]);
-  const offset = (currentPage - 1) * 20; 
+  const offset = (currentPage - 1) * 20;
 
   try {
     logger.info(`Previous users process started for page ${currentPage}`);
@@ -3033,7 +3903,7 @@ bot.action('topup_saldo', async (ctx) => {
   const chatId = ctx.chat.id;
 
   try {
-    await ctx.answerCbQuery(); 
+    await ctx.answerCbQuery();
     logger.info(`🔍 User ${userId} memulai proses top-up saldo.`);
 
     if (lastMenus[userId]) {
@@ -3081,7 +3951,7 @@ bot.action('topup_saweria', async (ctx) => {
   const chatId = ctx.chat.id;
 
   try {
-    await ctx.answerCbQuery(); 
+    await ctx.answerCbQuery();
     logger.info(`🔍 User ${userId} memulai proses top-up saldo.`);
 
     if (lastMenus[userId]) {
@@ -3267,7 +4137,7 @@ function prosesBonusTopUp(user_id, username, original_amount) {
           });
         });
       } else {
-        resolve(); 
+        resolve();
       }
     });
   });
@@ -3453,6 +4323,9 @@ bot.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data;
   const userStateData = userState[ctx.chat.id];
 
+  // Pastikan ini ditangani hanya sekali per callback
+  await ctx.answerCbQuery();
+
   if (global.depositState && global.depositState[userId] && global.depositState[userId].action === 'request_amount') {
     await handleDepositState(ctx, userId, data);
   } else if (userStateData) {
@@ -3483,6 +4356,15 @@ bot.on('callback_query', async (ctx) => {
         break;
       case 'edit_total_create_akun':
         await handleEditTotalCreateAkun(ctx, userStateData, data);
+        break;
+      // [UPDATE: Menambahkan handler untuk listreseller_ callback di sini]
+      case 'listreseller_': // Ini bukan step yang disimpan, tapi callback_data
+        const parts = data.split('_');
+        const direction = parts[1];
+        let page = parseInt(parts[2]);
+        page = direction === 'next' ? page + 1 : page - 1;
+        if (page < 1) page = 1;
+        await sendPaginatedResellerList(ctx, page, ctx.callbackQuery.message.message_id);
         break;
     }
   }
@@ -3718,7 +4600,7 @@ async function updateServerField(serverId, value, query) {
   return new Promise((resolve, reject) => {
     db.run(query, [value, serverId], function (err) {
       if (err) {
-        logger.error(`⚠️ Kesalahan saat mengupdate ${fieldName} server:`, err.message);
+        logger.error(`⚠️ Kesalahan saat mengupdate server field:`, err.message);
         reject(err);
       } else {
         resolve();
@@ -3735,7 +4617,7 @@ function generateRandomAmount(baseAmount) {
 global.depositState = {};
 global.pendingDeposits = {};
 let lastRequestTime = 0;
-const requestInterval = 1000; 
+const requestInterval = 1000;
 
 db.all('SELECT * FROM pending_deposits WHERE status = "pending"', [], (err, rows) => {
   if (err) {
@@ -3747,6 +4629,7 @@ db.all('SELECT * FROM pending_deposits WHERE status = "pending"', [], (err, rows
       amount: row.amount,
       originalAmount: row.original_amount,
       userId: row.user_id,
+      username: row.username,
       timestamp: row.timestamp,
       status: row.status,
       qrMessageId: row.qr_message_id
@@ -3756,18 +4639,18 @@ db.all('SELECT * FROM pending_deposits WHERE status = "pending"', [], (err, rows
 });
 
 const config = {
-    storeName: NAMA_STORE, 
+    storeName: NAMA_STORE,
     auth_username: MERCHANT_ID,
     auth_token: API_KEY,
-    baseQrString: DATA_QRIS, 
-    logoPath: 'logo.png' 
+    baseQrString: DATA_QRIS,
+    logoPath: 'logo.png'
 };
 
 const qris = new QRISPayment(config);
 
 async function processDeposit(ctx, amount) {
   const currentTime = Date.now();
-  
+
   if (currentTime - lastRequestTime < requestInterval) {
     await ctx.reply('⚠️ *Terlalu banyak permintaan. Silahkan tunggu sebentar sebelum mencoba lagi.*', { parse_mode: 'Markdown' });
     return;
@@ -3776,7 +4659,7 @@ async function processDeposit(ctx, amount) {
   lastRequestTime = currentTime;
   const userId = ctx.from.id;
   const uniqueCode = `user-${userId}-${currentTime}`;
-  
+
   const finalAmount = generateRandomAmount(parseInt(amount));
 
   if (!global.pendingDeposits) {
@@ -3784,10 +4667,10 @@ async function processDeposit(ctx, amount) {
   }
 
   try {
-  	
+
 let waitMsg = await ctx.reply("⏳ Mohon menunggu.");
 
-const dots = [".", "..", "..."];
+const dots = [".", "..", "...", " "];
 let i = 0;
 const interval = setInterval(async () => {
   i = (i + 1) % dots.length;
@@ -3803,7 +4686,7 @@ clearInterval(interval);
 
 const { qrBuffer } = await qris.generateQR(finalAmount);
 
-const caption = 
+const caption =
   `🧾 *Pembayaran:*\n\n` +
   `💵 Nominal: Rp ${finalAmount}\n` +
   `⏳ Batas: 5 menit\n` +
@@ -3814,7 +4697,7 @@ const caption =
 const inlineKeyboard = [
   [
     {
-      text: "📢 Join Group",
+      text: "📢 Join Channel",
       url: "https://t.me/myridtunnel"
     }
   ],
@@ -3841,34 +4724,38 @@ global.pendingDeposits[uniqueCode] = {
   amount: finalAmount,
   originalAmount: amount,
   userId,
-  username: ctx.from.username || `user_${ctx.from.id}`, // <--- TAMBAHKAN INI
+  username: ctx.from.username || `user_${ctx.from.id}`,
   timestamp: Date.now(),
   status: 'pending',
   qrMessageId: qrMessage.message_id
 };
 
-await insertPendingDeposit(uniqueCode, userId, finalAmount, amount, qrMessage.message_id);
+await insertPendingDeposit(uniqueCode, userId, ctx.from.username || `user_${ctx.from.id}`, finalAmount, amount, qrMessage.message_id);
 
 delete global.depositState[userId];
 
 
   } catch (error) {
     logger.error('❌ Kesalahan saat memproses deposit:', error);
-    await ctx.reply('❌ *GAGAL! Terjadi kesalahan saat memproses pembayaran. Silahkan coba lagi nanti.*', { parse_mode: 'Markdown' });
-    
-    delete global.depositState[userId];
-    delete global.pendingDeposits[uniqueCode];
-    
+
+    if (global.depositState && global.depositState[userId]) {
+        delete global.depositState[userId];
+    }
+    if (global.pendingDeposits && global.pendingDeposits[uniqueCode]) {
+        delete global.pendingDeposits[uniqueCode];
+    }
     await deletePendingDeposit(uniqueCode);
+
+    await ctx.reply('❌ *GAGAL! Terjadi kesalahan saat memproses pembayaran. Silahkan coba lagi nanti.*', { parse_mode: 'Markdown' });
   }
 }
 
-function insertPendingDeposit(uniqueCode, userId, finalAmount, originalAmount, qrMessageId) {
+function insertPendingDeposit(uniqueCode, userId, username, finalAmount, originalAmount, qrMessageId) {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO pending_deposits (unique_code, user_id, amount, original_amount, timestamp, status, qr_message_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [uniqueCode, userId, finalAmount, originalAmount, Date.now(), 'pending', qrMessageId],
+      `INSERT INTO pending_deposits (unique_code, user_id, username, amount, original_amount, timestamp, status, qr_message_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uniqueCode, userId, username, finalAmount, originalAmount, Date.now(), 'pending', qrMessageId],
       (err) => {
         if (err) {
           logger.error('Gagal insert pending_deposits:', err.message);
@@ -3897,17 +4784,17 @@ function deletePendingDeposit(uniqueCode) {
 async function checkQRISStatus() {
   try {
     const pendingDeposits = Object.entries(global.pendingDeposits);
-
+    
     for (const [uniqueCode, deposit] of pendingDeposits) {
       if (deposit.status !== 'pending') continue;
-
+      
       const depositAge = Date.now() - deposit.timestamp;
       if (depositAge > 5 * 60 * 1000) {
         try {
           if (deposit.qrMessageId) {
             await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId);
           }
-          await bot.telegram.sendMessage(deposit.userId,
+          await bot.telegram.sendMessage(deposit.userId, 
             '❌ *Pembayaran Expired*\n\n' +
             'Waktu pembayaran telah habis. Silahkan klik Top Up lagi untuk mendapatkan QR baru.',
             { parse_mode: 'Markdown' }
@@ -3923,16 +4810,21 @@ async function checkQRISStatus() {
       }
 
       try {
-        const url = `https://mutasiv1.vercel.app/check-payment?merchant=${MERCHANT_ID}&key=${API_KEY}`;
-        const response = await axios.get(url);
-        const paymentList = response.data?.data || [];
+        const result = await qris.checkPayment(uniqueCode, deposit.amount);
+        
+        if (result.success && result.data.status === 'PAID') {
+          const transactionKey = `${result.data.reference}_${result.data.amount}`;
+          if (global.processedTransactions.has(transactionKey)) {
+            logger.info(`Transaction ${transactionKey} already processed, skipping...`);
+            continue;
+          }
 
-        // PATCH: Gunakan Number() untuk expectedAmount agar match tipe data
-        const expectedAmount = Number(deposit.amount);
-        const matched = paymentList.find(item => Number(item.amount) === expectedAmount);
+          if (parseInt(result.data.amount) !== deposit.amount) {
+            logger.info(`Amount mismatch for ${uniqueCode}: expected ${deposit.amount}, got ${result.data.amount}`);
+            continue;
+          }
 
-        if (matched) {
-          const success = await processMatchingPayment(deposit, matched, uniqueCode);
+          const success = await processMatchingPayment(deposit, result.data, uniqueCode);
           if (success) {
             logger.info(`Payment processed successfully for ${uniqueCode}`);
             delete global.pendingDeposits[uniqueCode];
@@ -3996,13 +4888,13 @@ function keyboard_full() {
 }
 
 global.processedTransactions = new Set();
-async function updateUserBalance(userId, amount) { 
+async function updateUserBalance(userId, amount) {
     return new Promise((resolve, reject) => {
         db.run("UPDATE users SET saldo = saldo + ? WHERE user_id = ?",
             [amount, userId],
             function(err) {
                 if (err) {
-                    logger.error('Kesalahan saat mengupdate saldo pengguna:', err.message); 
+                    logger.error('Kesalahan saat mengupdate saldo pengguna:', err.message);
                     reject(err);
                     return;
                 }
@@ -4026,36 +4918,69 @@ async function getUserBalance(userId) {
   });
 }
 
-// Ambil data grup dari file konfigurasi
 function getBotGroupData() {
   try {
-    const raw = fs.readFileSync('/etc/bot/.bot.db', 'utf8');
-    const line = raw.split('\n').find(line => line.startsWith('#bot# '));
-    if (!line) return null;
+    if (!groupId || !BOT_TOKEN) {
+      logger.warn('❌ Konfigurasi grup tidak lengkap di .vars.json (GROUP_CHAT_ID atau BOT_TOKEN kosong). Notifikasi grup mungkin tidak berfungsi.');
+      return null;
+    }
 
-    const parts = line.trim().split(' ');
-    if (parts.length < 3) return null;
+    return { keyGroup: BOT_TOKEN, chatId: groupId };
 
-    return { keyGroup: parts[1], chatId: parts[2] };
   } catch (err) {
-    logger.error('Gagal membaca file .bot.db:', err.message);
+    logger.error('❌ Terjadi kesalahan saat mendapatkan data grup:', err.message);
     return null;
   }
 }
 
-// Kirim log transaksi ke grup
+async function getIspNameFromExternalSource(domainOrIp) {
+  if (!domainOrIp || domainOrIp === '-') {
+    return 'N/A'; // Jika domain/IP tidak valid, kembalikan N/A
+  }
+  try {
+    // Menggunakan ip-api.com untuk lookup ISP
+    const response = await axios.get(`http://ip-api.com/json/${domainOrIp}?fields=isp`);
+    if (response.data && response.data.isp) {
+      return response.data.isp;
+    }
+    return 'Unknown ISP';
+  } catch (error) {
+    logger.error(`❌ Gagal mengambil ISP untuk ${domainOrIp}:`, error.message);
+    return 'Failed to get ISP'; 
+  }
+}
+
+function censorAccountUsername(username) {
+  if (!username || typeof username !== 'string') {
+    return 'N/A'; 
+  }
+  if (username.length <= 3) {
+    return username + 'xxx'; 
+  }
+ 
+  return username.substring(0, 3) + 'xxx';
+}
+
+
 async function sendTransactionLogToGroup({
   trxNumber,
+  userRole,
   tgUsername,
   tgUserId,
-  serviceName,
   serverName,
+  ispName,
+  domainName,
+  accountUsername,
+  serviceName,
+  limitQuota,
+  limitLogin,
   trxType,
   activeDays,
   costValue,
+  hargaNormalPerHari,
+  saldoDikurangi,
   userSaldoNow,
   dateLabel,
-  tololBoy,
   timeLabel
 }) {
   const groupData = getBotGroupData();
@@ -4064,19 +4989,42 @@ async function sendTransactionLogToGroup({
     return;
   }
 
+  // Tentukan emoji dan teks status berdasarkan role
+  let statusEmoji = '';
+  let statusText = '';
+  if (userRole === 'admin') {
+    statusEmoji = '👑';
+    statusText = 'Admin';
+  } else if (userRole === 'reseller') {
+    statusEmoji = '🏆';
+    statusText = 'Reseller';
+  } else {
+    statusEmoji = '👤';
+    statusText = 'Member';
+  }
+
+  // Terapkan sensor pada username akun sebelum ditampilkan
+  const censoredAccountUsername = censorAccountUsername(accountUsername);
+
   const message = `
 <b>━━━━━━━━━━━━━━━━━━</b>
 <b>❇️ Transaksi Berhasil ❇️</b>
 <b>━━━━━━━━━━━━━━━━━━</b>
 📒 <b>» No Trx:</b> #${trxNumber}
-🌀 <b>» Username:</b> ${tgUsername}
-✨ <b>» ID:</b> <code>${tgUserId}</code>
-🥇 <b>» Server:</b> ${serverName}
-🥈 <b>» Produk:</b> ${serviceName}
-🥉 <b>» Type:</b> ${trxType}
+🌀 <b>» Status:</b> ${statusText} ${statusEmoji}
+♂️ <b>» Username:</b> ${tgUsername}
+📋 <b>» ID:</b> <code>${tgUserId}</code>
+🏷️ <b>» Server:</b> ${serverName}
+🏷️ <b>» ISP :</b> ${ispName}
+🏷️ <b>» Domain / IP :</b> <code>${domainName}</code>
+🏷️ <b>» Nama :</b> ${censoredAccountUsername}
+🏷️ <b>» Produk:</b> ${serviceName}
+🏷️ <b>» Limit Quota :</b> ${limitQuota} GB
+🏷️ <b>» Limit Login :</b> ${limitLogin} Hp
+🏷️ <b>» Type:</b> ${trxType}
 🏷️ <b>» Durasi akun:</b> ${activeDays} Hari Rp.${costValue.toLocaleString('id-ID')}
-🏷️ <b>» Harga Perhari:</b> Rp.${tololBoy.toLocaleString('id-ID')}
-🏷️ <b>» Saldo di kurangi:</b> Rp.${costValue.toLocaleString('id-ID')}
+🏷️ <b>» Harga Normal Perhari:</b> Rp.${hargaNormalPerHari.toLocaleString('id-ID')}
+🏷️ <b>» Saldo di kurangi:</b> Rp.${saldoDikurangi.toLocaleString('id-ID')}
 🏷️ <b>» Saldo saat ini:</b> Rp.${userSaldoNow.toLocaleString('id-ID')}
 🏷️ <b>» Tanggal:</b> ${dateLabel}
 🏷️ <b>» Waktu:</b> ${timeLabel}
@@ -4095,53 +5043,63 @@ async function sendTransactionLogToGroup({
     logger.error(`❌ Gagal kirim log transaksi ke grup: ${err.response?.data?.description || err.message}`);
   }
 }
+// --- AKHIR FUNGSI sendTransactionLogToGroup ---
 
-// Dapatkan nomor transaksi terakhir
-function getLastTransactionNumber() {
-  return new Promise((resolve, reject) => {
-    db.get('SELECT id FROM log_penjualan ORDER BY id DESC LIMIT 1', (err, row) => {
-      if (err) return reject(err);
-      resolve(row ? row.id + 1 : 1000);
-    });
-  });
-}
+// --- AKHIR FUNGSI sendTransactionLogToGroup ---
 
-// Ambil saldo user dari database
-function getUserSaldo(userId) {
-  return new Promise((resolve, reject) => {
-    db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], (err, row) => {
-      if (err) return reject(err);
-      resolve(row ? row.saldo : 0);
-    });
-  });
-}
 
-// Fungsi utama setelah pembuatan/perpanjangan akun
+// --- BAGIAN FUNGSI afterAccountTransaction (GANTI SELURUHNYA) ---
 async function afterAccountTransaction({
   userId,
   username,
   produk,
   serverId,
   jenis,
-  durasi
+  durasi,
+  accountUsername // Ini adalah username akun VPN yang sebenarnya dari state.username
 }) {
   try {
     const now = new Date();
 
     // Ambil informasi server dari DB
     const serverDetails = await new Promise((resolve, reject) => {
-      db.get('SELECT nama_server, harga FROM Server WHERE id = ?', [serverId], (err, row) => {
+      db.get('SELECT nama_server, harga, domain, quota, iplimit FROM Server WHERE id = ?', [serverId], (err, row) => {
         if (err) {
           logger.error('❌ Gagal mengambil data server:', err.message);
           return reject(err);
         }
-        resolve(row || {}); // fallback ke object kosong
+        resolve(row || {});
       });
     });
 
     const serverNamaTampilan = serverDetails.nama_server || '-';
     const hargaPerHari = serverDetails.harga || 0;
-    const totalHarga = hargaPerHari * durasi;
+    const domainServer = serverDetails.domain || '-';
+    const quotaServer = serverDetails.quota || 0;
+    const iplimitServer = serverDetails.iplimit || 0;
+
+    // Panggil fungsi untuk mendapatkan ISP Name dari sumber eksternal
+    const ispServer = await getIspNameFromExternalSource(domainServer);
+
+    let totalHarga = hargaPerHari * durasi;
+
+    // Ambil role user saat ini
+    const userRole = await new Promise((resolve) => {
+        db.get('SELECT role FROM users WHERE user_id = ?', [userId], (err, row) => {
+            resolve(row ? row.role : 'member');
+        });
+    });
+
+    // Terapkan diskon reseller jika role adalah 'reseller'
+    if (userRole === 'reseller') {
+        const resellerDiscount = await new Promise((resolve) => {
+            db.get('SELECT discount_percent FROM reseller_config WHERE id = 1', (err, row) => {
+                if (err) reject(err);
+                else resolve(row ? row.discount_percent : 0);
+            });
+        });
+        totalHarga = Math.floor(totalHarga * (100 - resellerDiscount) / 100);
+    }
 
     // Ambil nomor transaksi terakhir
     const trxNumber = await getLastTransactionNumber();
@@ -4164,16 +5122,23 @@ async function afterAccountTransaction({
     // Kirim log transaksi ke grup
     await sendTransactionLogToGroup({
       trxNumber,
+      userRole: adminIds.includes(userId) ? 'admin' : userRole,
       tgUsername: username ? (username.startsWith('@') ? username : `@${username}`) : 'Tidak tersedia',
       tgUserId: userId,
-      serviceName: produk || 'Tidak diketahui',
       serverName: serverNamaTampilan,
+      ispName: ispServer,
+      domainName: domainServer,
+      accountUsername: accountUsername, // Pastikan ini meneruskan username yang sebenarnya
+      serviceName: produk || 'Tidak diketahui',
+      limitQuota: quotaServer,
+      limitLogin: iplimitServer,
       trxType: jenis || 'Create',
       activeDays: durasi || 0,
       costValue: totalHarga || 0,
+      hargaNormalPerHari: hargaPerHari || 0,
+      saldoDikurangi: totalHarga || 0,
       userSaldoNow: saldo || 0,
       dateLabel: tanggal,
-      tololBoy: totalHarga,
       timeLabel: waktu
     });
 
@@ -4181,6 +5146,27 @@ async function afterAccountTransaction({
   } catch (error) {
     logger.error(`❌ Error afterAccountTransaction user ${userId}:`, error?.stack || error?.message || error);
   }
+}
+
+
+// Dapatkan nomor transaksi terakhir
+function getLastTransactionNumber() {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT id FROM log_penjualan ORDER BY id DESC LIMIT 1', (err, row) => {
+      if (err) return reject(err);
+      resolve(row ? row.id + 1 : 1000);
+    });
+  });
+}
+
+// Ambil saldo user dari database
+function getUserSaldo(userId) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], (err, row) => {
+      if (err) return reject(err);
+      resolve(row ? row.saldo : 0);
+    });
+  });
 }
 
 async function sendPaymentSuccessNotificationByUserId(userId, deposit, currentBalance, username = 'Tidak tersedia') {
@@ -4337,7 +5323,8 @@ async function processMatchingPayment(deposit, matchingTransaction, uniqueCode) 
         amount: deposit.originalAmount,
         originalAmount: deposit.originalAmount,
         bonus: deposit.bonus,
-        bonus_percent: deposit.bonus_percent
+        bonus_percent: deposit.bonus_percent,
+        qrMessageId: deposit.qrMessageId
       },
       userBalance.saldo,
       deposit.username
@@ -4397,7 +5384,7 @@ async function kirimFileKeTelegram() {
     console.error("❌ Error saat mengirim file:", err.message);
   }
 }
- 
+
 setInterval(kirimFileKeTelegram, 2 * 60 * 60 * 1000);
 
 function resetUserSaldo(userId) {
@@ -4615,18 +5602,73 @@ async function sendPaginatedUserSaldo(ctx, page = 1, isEdit = false) {
 }
 
 bot.on('callback_query', async (ctx) => {
-  try {
-    const data = ctx.callbackQuery.data;
+  const userId = ctx.from.id;
+  const data = ctx.callbackQuery.data;
+  const userStateData = userState[ctx.chat.id];
 
-    if (data.startsWith('listsaldo_')) {
-      const page = parseInt(data.split('_')[1], 10);
-      await sendPaginatedUserSaldo(ctx, page, true);
-    }
+  // Pastikan ini ditangani hanya sekali per callback
+  await ctx.answerCbQuery();
 
-    await ctx.answerCbQuery();
-  } catch (err) {
-    console.error('❌ Gagal tangani callback_query:', err);
-    await ctx.answerCbQuery('Terjadi kesalahan.');
+  // Check if the callback data is for paginated saldo list
+  if (data.startsWith('listsaldo_')) {
+    const page = parseInt(data.split('_')[1], 10);
+    await sendPaginatedUserSaldo(ctx, page, true);
+  }
+  // [UPDATE: Menambahkan handler untuk listreseller_ callback di sini]
+  else if (data.startsWith('listreseller_')) {
+      const parts = data.split('_');
+      const direction = parts[1];
+      let page = parseInt(parts[2]);
+      page = direction === 'next' ? page + 1 : page - 1;
+      if (page < 1) page = 1;
+      await sendPaginatedResellerList(ctx, page, ctx.callbackQuery.message.message_id);
+  }
+  // Tambahkan penanganan callback lainnya di sini jika ada
+  else if (userStateData) { // Existing userState handling logic
+      // Periksa apakah ini callback dari keyboard_nomor atau keyboard_abc
+      const isNumericInput = !isNaN(parseInt(data, 10)) || data === 'delete' || data === 'confirm';
+      const isAlphaNumericInput = /^[a-zA-Z0-9.-]+$/.test(data) || data === 'delete' || data === 'confirm';
+
+      if (global.depositState[ctx.from.id] && global.depositState[ctx.from.id].action === 'request_amount' && isNumericInput) {
+          await handleDepositState(ctx, ctx.from.id, data);
+      } else {
+          switch (userStateData.step) {
+              case 'add_saldo':
+                  if (isNumericInput) await handleAddSaldo(ctx, userStateData, data);
+                  break;
+              case 'edit_batas_create_akun':
+                  if (isNumericInput) await handleEditBatasCreateAkun(ctx, userStateData, data);
+                  break;
+              case 'edit_limit_ip':
+                  if (isNumericInput) await handleEditiplimit(ctx, userStateData, data);
+                  break;
+              case 'edit_quota':
+                  if (isNumericInput) await handleEditQuota(ctx, userStateData, data);
+                  break;
+              case 'edit_auth':
+                  if (isAlphaNumericInput) await handleEditAuth(ctx, userStateData, data);
+                  break;
+              case 'edit_domain':
+                  if (isAlphaNumericInput) await handleEditDomain(ctx, userStateData, data);
+                  break;
+              case 'edit_harga':
+                  if (isNumericInput) await handleEditHarga(ctx, userStateData, data);
+                  break;
+              case 'edit_nama':
+                  if (isAlphaNumericInput) await handleEditNama(ctx, userStateData, data);
+                  break;
+              case 'edit_total_create_akun':
+                  if (isNumericInput) await handleEditTotalCreateAkun(ctx, userStateData, data);
+                  break;
+              // Tambahkan case untuk callback_data yang tidak memerlukan input dari keyboard_nomor/abc
+              default:
+                  // Jika callback_data tidak cocok dengan state yang sedang aktif,
+                  // biarkan aksi default atau berikan pesan error.
+                  logger.warn(`Unhandled callback_query: ${data} for userState.step: ${userStateData.step}`);
+                  // Opsional: ctx.reply('Perintah tidak dikenal atau sesi telah berakhir.');
+                  break;
+          }
+      }
   }
 });
 
@@ -4638,6 +5680,56 @@ bot.command('listsaldo', async (ctx) => {
   await sendPaginatedUserSaldo(ctx, 1);
 });
 
+// [UPDATE: Fungsi downgradeInactiveResellers]
+async function downgradeInactiveResellers() {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    db.all(`SELECT user_id, username FROM users WHERE role = 'reseller'`, [], async (err, resellers) => {
+        if (err) {
+            logger.error('❌ Error mengambil daftar reseller untuk downgrade:', err.message);
+            return;
+        }
+
+        for (const reseller of resellers) {
+            // Jangan downgrade admin jika mereka juga reseller
+            if (adminIds.includes(reseller.user_id)) {
+                continue;
+            }
+
+            db.get(`
+                SELECT COUNT(*) AS total_transactions
+                FROM log_penjualan
+                WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ('create', 'renew')
+            `, [reseller.user_id, thirtyDaysAgo], (err, row) => {
+                if (err) {
+                    logger.error(`❌ Error cek transaksi reseller ${reseller.user_id}:`, err.message);
+                    return;
+                }
+
+                const totalTransactions = row?.total_transactions || 0;
+
+                if (totalTransactions < 3) {
+                    db.run(`UPDATE users SET role = 'member' WHERE user_id = ?`, [reseller.user_id], (err) => {
+                        if (err) {
+                            logger.error(`❌ Gagal downgrade reseller ${reseller.user_id}:`, err.message);
+                        } else {
+                            logger.info(`📉 Reseller ${reseller.user_id} didowngrade ke member (transaksi: ${totalTransactions})`);
+                            bot.telegram.sendMessage(reseller.user_id,
+                                '⚠️ *Pemberitahuan Penting: Role Reseller Anda telah dinonaktifkan.*\n\n' +
+                                'Anda telah didowngrade menjadi *Member Biasa* karena jumlah transaksi Anda dalam 30 hari terakhir kurang dari 3 transaksi. ' +
+                                'Jika Anda ingin menjadi Reseller kembali, silakan hubungi administrator.',
+                                { parse_mode: 'Markdown' }
+                            ).catch(e => logger.warn(`Gagal kirim notif downgrade ke ${reseller.user_id}: ${e.message}`));
+                        }
+                    });
+                } else {
+                    logger.info(`✅ Reseller ${reseller.user_id} aktif (transaksi: ${totalTransactions})`);
+                }
+            });
+        }
+    });
+}
+// [END UPDATE]
 
 
 process.on('uncaughtException', (err) => {
@@ -4653,6 +5745,12 @@ app.listen(port)
     logger.info(`Express server listening on port ${port}`);
     bot.launch().then(() => {
       logger.info("Bot launched");
+      // [UPDATE: Menjalankan pengecekan downgrade reseller secara berkala]
+      setInterval(() => {
+        logger.info('🔁 Menjalankan pengecekan downgrade reseller...');
+        downgradeInactiveResellers();
+      }, 6 * 60 * 60 * 1000); // Tiap 6 jam
+      // [END UPDATE]
     }).catch((err) => {
       logger.error("Bot failed to launch:", err);
     });
