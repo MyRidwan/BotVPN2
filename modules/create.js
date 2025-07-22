@@ -1,6 +1,7 @@
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('./sellvpn.db');
+
 async function trialssh(username, password, exp, iplimit, serverId) {
   console.log(`Creating SSH account for ${username} with expiry ${exp} days, IP limit ${iplimit}, and password ${password}`);
   
@@ -14,10 +15,10 @@ async function trialssh(username, password, exp, iplimit, serverId) {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -31,15 +32,15 @@ async function trialssh(username, password, exp, iplimit, serverId) {
 ──────────────────────           
                  *SSH ACCOUNT*
 ──────────────────────
-*Domain*   : \`${sshData.domain}\`
+*Domain* : \`${sshData.domain}\`
 *Nameserver*: \`${sshData.ns_domain}\`
 *Username* : \`${sshData.username}\`
 *Password* : \`${sshData.password}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*OpenSSH*  : \`22\`
-*UdpSSH*   : \`1-65535\`
-*DNS*      : \`53,2222\`
+*OpenSSH* : \`22\`
+*UdpSSH* : \`1-65535\`
+*DNS* : \`53,2222\`
 *Dropbear* : \`109,110\`
 *BadVPN UDP*: \`7300\`
 *Pub Key* : \`${sshData.pubkey}\`
@@ -60,12 +61,12 @@ async function trialssh(username, password, exp, iplimit, serverId) {
               return resolve(msg);
             } else {
               console.log('Error creating SSH account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat SSH:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat SSH. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat SSH. Silakan coba lagi nanti.');
         });
     });
   });
@@ -83,10 +84,10 @@ async function trialvmess(username, exp, quota, limitip, serverId) {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -101,13 +102,13 @@ async function trialvmess(username, exp, quota, limitip, serverId) {
               *VMESS ACCOUNT*
 ──────────────────────
 *Username* : \`${vmessData.username}\`
-*Domain*   : \`${vmessData.domain}\`
+*Domain* : \`${vmessData.domain}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*UUID*     : \`${vmessData.uuid}\`
+*UUID* : \`${vmessData.uuid}\`
 *Alter ID* : \`0\`
 *Security* : \`Auto\`
-*Path*     : \`/vmess\`
+*Path* : \`/vmess\`
 *Path gRPC*: \`vmess-grpc\`
 ──────────────────────
 *URL TLS:*
@@ -134,12 +135,12 @@ ${vmessData.vmess_grpc_link}
               return resolve(msg);
             } else {
               console.log('Error creating VMess account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat VMess:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat VMess. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat VMess. Silakan coba lagi nanti.');
         });
     });
   });
@@ -157,10 +158,10 @@ async function trialvless(username, exp, quota, limitip, serverId) {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -175,11 +176,11 @@ async function trialvless(username, exp, quota, limitip, serverId) {
                *VLESS ACCOUNT*
 ──────────────────────
 *Username* : \`${vlessData.username}\`
-*Domain*   : \`${vlessData.domain}\`
+*Domain* : \`${vlessData.domain}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*UUID*     : \`${vlessData.uuid}\`
-*Path*     : \`/vless\`
+*UUID* : \`${vlessData.uuid}\`
+*Path* : \`/vless\`
 *Path gRPC*: \`vless-grpc\`
 ──────────────────────
 *URL TLS:*
@@ -206,12 +207,12 @@ ${vlessData.vless_grpc_link}
               return resolve(msg);
             } else {
               console.log('Error creating VLESS account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat VLESS:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat VLESS. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat VLESS. Silakan coba lagi nanti.');
         });
     });
   });
@@ -219,7 +220,6 @@ ${vlessData.vless_grpc_link}
 async function trialtrojan(username, exp, quota, limitip, serverId) {
   console.log(`Creating Trojan account for ${username} with expiry ${exp} days, quota ${quota} GB, limit IP ${limitip} on server ${serverId}`);
   
-  // Validasi username
   if (/\s/.test(username) || /[^a-zA-Z0-9]/.test(username)) {
     return '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.';
   }
@@ -229,10 +229,10 @@ async function trialtrojan(username, exp, quota, limitip, serverId) {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -247,11 +247,11 @@ async function trialtrojan(username, exp, quota, limitip, serverId) {
             *TROJAN ACCOUNT*
 ──────────────────────
 *Username* : \`${trojanData.username}\`
-*Domain*   : \`${trojanData.domain}\`
+*Domain* : \`${trojanData.domain}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*UUID*     : \`${trojanData.uuid}\`
-*Path*     : \`/trojan-ws\`
+*UUID* : \`${trojanData.uuid}\`
+*Path* : \`/trojan-ws\`
 *Path gRPC*: \`trojan-grpc\`
 ──────────────────────
 *URL TLS:*
@@ -274,12 +274,12 @@ ${trojanData.trojan_grpc_link}
               return resolve(msg);
             } else {
               console.log('Error creating Trojan account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat Trojan:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat Trojan. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat Trojan. Silakan coba lagi nanti.');
         });
     });
   });
@@ -288,20 +288,18 @@ ${trojanData.trojan_grpc_link}
 async function trialshadowsocks(username, exp, quota, limitip, serverId) {
   console.log(`Creating Shadowsocks account for ${username} with expiry ${exp} days, quota ${quota} GB, limit IP ${limitip} on server ${serverId}`);
   
-  // Validasi username
   if (/\s/.test(username) || /[^a-zA-Z0-9]/.test(username)) {
     return '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.';
   }
 
-  // Ambil domain dari database
   return new Promise((resolve, reject) => {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -316,11 +314,11 @@ async function trialshadowsocks(username, exp, quota, limitip, serverId) {
       *SHADOWSOCKS ACCOUNT*
 ──────────────────────
 *Username* : \`${shadowsocksData.username}\`
-*Domain*   : \`${shadowsocksData.domain}\`
+*Domain* : \`${shadowsocksData.domain}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*UUID*     : \`${shadowsocksData.uuid}\`
-*Path*     : \`/ss-ws\`
+*UUID* : \`${shadowsocksData.uuid}\`
+*Path* : \`/ss-ws\`
 *Path gRPC*: \`ss-grpc\`
 ──────────────────────
 *URL TLS:*
@@ -347,12 +345,12 @@ ${shadowsocksData.ss_link_grpc}
               return resolve(msg);
             } else {
               console.log('Error creating Shadowsocks account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat Shadowsocks:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat Shadowsocks. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat Shadowsocks. Silakan coba lagi nanti.');
         });
     });
   });
@@ -361,20 +359,18 @@ ${shadowsocksData.ss_link_grpc}
 async function createssh(username, password, exp, iplimit, serverId) {
   console.log(`Creating SSH account for ${username} with expiry ${exp} days, IP limit ${iplimit}, and password ${password}`);
   
-  // Validasi username
   if (/\s/.test(username) || /[^a-zA-Z0-9]/.test(username)) {
     return '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.';
   }
 
-  // Ambil domain dari database
   return new Promise((resolve, reject) => {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -388,15 +384,15 @@ async function createssh(username, password, exp, iplimit, serverId) {
 ──────────────────────           
                  *SSH ACCOUNT*
 ──────────────────────
-*Domain*   : \`${sshData.domain}\`
+*Domain* : \`${sshData.domain}\`
 *Nameserver*: \`${sshData.ns_domain}\`
 *Username* : \`${sshData.username}\`
 *Password* : \`${sshData.password}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*OpenSSH*  : \`22\`
-*UdpSSH*   : \`1-65535\`
-*DNS*      : \`53,2222\`
+*OpenSSH* : \`22\`
+*UdpSSH* : \`1-65535\`
+*DNS* : \`53,2222\`
 *Dropbear* : \`109,110\`
 *BadVPN UDP*: \`7300\`
 *Pub Key* : \`${sshData.pubkey}\`
@@ -417,12 +413,12 @@ async function createssh(username, password, exp, iplimit, serverId) {
               return resolve(msg);
             } else {
               console.log('Error creating SSH account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat SSH:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat SSH. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat SSH. Silakan coba lagi nanti.');
         });
     });
   });
@@ -430,20 +426,18 @@ async function createssh(username, password, exp, iplimit, serverId) {
 async function createvmess(username, exp, quota, limitip, serverId) {
   console.log(`Creating VMess account for ${username} with expiry ${exp} days, quota ${quota} GB, limit IP ${limitip} on server ${serverId}`);
   
-  // Validasi username
   if (/\s/.test(username) || /[^a-zA-Z0-9]/.test(username)) {
     return '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.';
   }
 
-  // Ambil domain dan auth dari database
   return new Promise((resolve, reject) => {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -458,13 +452,13 @@ async function createvmess(username, exp, quota, limitip, serverId) {
               *VMESS ACCOUNT*
 ──────────────────────
 *Username* : \`${vmessData.username}\`
-*Domain*   : \`${vmessData.domain}\`
+*Domain* : \`${vmessData.domain}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*UUID*     : \`${vmessData.uuid}\`
+*UUID* : \`${vmessData.uuid}\`
 *Alter ID* : \`0\`
 *Security* : \`Auto\`
-*Path*     : \`/vmess\`
+*Path* : \`/vmess\`
 *Path gRPC*: \`vmess-grpc\`
 ──────────────────────
 *URL TLS:*
@@ -491,12 +485,12 @@ ${vmessData.vmess_grpc_link}
               return resolve(msg);
             } else {
               console.log('Error creating VMess account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat VMess:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat VMess. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat VMess. Silakan coba lagi nanti.');
         });
     });
   });
@@ -504,20 +498,18 @@ ${vmessData.vmess_grpc_link}
 async function createvless(username, exp, quota, limitip, serverId) {
   console.log(`Creating VLESS account for ${username} with expiry ${exp} days, quota ${quota} GB, limit IP ${limitip} on server ${serverId}`);
   
-  // Validasi username
   if (/\s/.test(username) || /[^a-zA-Z0-9]/.test(username)) {
     return '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.';
   }
 
-  // Ambil domain dari database
   return new Promise((resolve, reject) => {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -532,11 +524,11 @@ async function createvless(username, exp, quota, limitip, serverId) {
                *VLESS ACCOUNT*
 ──────────────────────
 *Username* : \`${vlessData.username}\`
-*Domain*   : \`${vlessData.domain}\`
+*Domain* : \`${vlessData.domain}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*UUID*     : \`${vlessData.uuid}\`
-*Path*     : \`/vless\`
+*UUID* : \`${vlessData.uuid}\`
+*Path* : \`/vless\`
 *Path gRPC*: \`vless-grpc\`
 ──────────────────────
 *URL TLS:*
@@ -563,12 +555,12 @@ ${vlessData.vless_grpc_link}
               return resolve(msg);
             } else {
               console.log('Error creating VLESS account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat VLESS:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat VLESS. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat VLESS. Silakan coba lagi nanti.');
         });
     });
   });
@@ -576,20 +568,18 @@ ${vlessData.vless_grpc_link}
 async function createtrojan(username, exp, quota, limitip, serverId) {
   console.log(`Creating Trojan account for ${username} with expiry ${exp} days, quota ${quota} GB, limit IP ${limitip} on server ${serverId}`);
   
-  // Validasi username
   if (/\s/.test(username) || /[^a-zA-Z0-9]/.test(username)) {
     return '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.';
   }
 
-  // Ambil domain dari database
   return new Promise((resolve, reject) => {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -604,11 +594,11 @@ async function createtrojan(username, exp, quota, limitip, serverId) {
             *TROJAN ACCOUNT*
 ──────────────────────
 *Username* : \`${trojanData.username}\`
-*Domain*   : \`${trojanData.domain}\`
+*Domain* : \`${trojanData.domain}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*UUID*     : \`${trojanData.uuid}\`
-*Path*     : \`/trojan-ws\`
+*UUID* : \`${trojanData.uuid}\`
+*Path* : \`/trojan-ws\`
 *Path gRPC*: \`trojan-grpc\`
 ──────────────────────
 *URL TLS:*
@@ -631,12 +621,12 @@ ${trojanData.trojan_grpc_link}
               return resolve(msg);
             } else {
               console.log('Error creating Trojan account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat Trojan:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat Trojan. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat Trojan. Silakan coba lagi nanti.');
         });
     });
   });
@@ -645,20 +635,18 @@ ${trojanData.trojan_grpc_link}
 async function createshadowsocks(username, exp, quota, limitip, serverId) {
   console.log(`Creating Shadowsocks account for ${username} with expiry ${exp} days, quota ${quota} GB, limit IP ${limitip} on server ${serverId}`);
   
-  // Validasi username
   if (/\s/.test(username) || /[^a-zA-Z0-9]/.test(username)) {
     return '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.';
   }
 
-  // Ambil domain dari database
   return new Promise((resolve, reject) => {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
       }
 
-      if (!server) return resolve('❌ Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
 
       const domain = server.domain;
       const auth = server.auth;
@@ -673,11 +661,11 @@ async function createshadowsocks(username, exp, quota, limitip, serverId) {
       *SHADOWSOCKS ACCOUNT*
 ──────────────────────
 *Username* : \`${shadowsocksData.username}\`
-*Domain*   : \`${shadowsocksData.domain}\`
+*Domain* : \`${shadowsocksData.domain}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
-*UUID*     : \`${shadowsocksData.uuid}\`
-*Path*     : \`/ss-ws\`
+*UUID* : \`${shadowsocksData.uuid}\`
+*Path* : \`/ss-ws\`
 *Path gRPC*: \`ss-grpc\`
 ──────────────────────
 *URL TLS:*
@@ -704,15 +692,15 @@ ${shadowsocksData.ss_link_grpc}
               return resolve(msg);
             } else {
               console.log('Error creating Shadowsocks account');
-              return resolve(`❌ Terjadi kesalahan: ${response.data.message}`);
+              return resolve(`❌ Gagal: ${response.data.message}`);
             }
           })
         .catch(error => {
           console.error('Error saat membuat Shadowsocks:', error);
-          return resolve('❌ Terjadi kesalahan saat membuat Shadowsocks. Silakan coba lagi nanti.');
+          return resolve('❌ Gagal membuat Shadowsocks. Silakan coba lagi nanti.');
         });
     });
   });
 }
 
-module.exports = { trialssh, trialvmess, trialvless, trialtrojan, trialshadowsocks, createssh, createvmess, createvless, createtrojan, createshadowsocks }; 
+module.exports = { trialssh, trialvmess, trialvless, trialtrojan, trialshadowsocks, createssh, createvmess, createvless, createtrojan, createshadowsocks };
