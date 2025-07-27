@@ -9,6 +9,7 @@ const winston = require('winston');
 const fetch = require("node-fetch");
 const FormData = require("form-data");
 const FOLDER_TEMPATDB = "/root/BotVPN2/sellvpn.db";
+const UPGRADE_RESELLER_TOPUP_THRESHOLD = 30000; // Minimal topup untuk upgrade reseller otomatis
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -118,6 +119,30 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
                 else logger.info('✅ Tabel bonus_log siap');
             });
 
+db.all("PRAGMA table_info(pending_deposits)", (err, columns) => {
+  if (err) return console.error("Gagal cek info pending_deposits:", err.message);
+  const hasUsername = columns.some(col => col.name === 'username');
+  if (!hasUsername) {
+    db.run("ALTER TABLE pending_deposits ADD COLUMN username TEXT", (err) => {
+      if (err) console.error("Gagal menambahkan kolom username:", err.message);
+      else console.log("✅ Kolom username berhasil ditambahkan ke pending_deposits");
+    });
+  } else {
+    console.log("ℹ️ Kolom username sudah ada di pending_deposits");
+  }
+});
+
+db.all("PRAGMA table_info(ui_config)", (err, columns) => {
+  if (err) return console.error(err);
+  const hasUpgrade = columns.some(col => col.name === 'show_upgrade_reseller_button');
+  if (!hasUpgrade) {
+    db.run("ALTER TABLE ui_config ADD COLUMN show_upgrade_reseller_button INTEGER DEFAULT 1", (err) => {
+      if (err) console.error("Gagal menambah kolom show_upgrade_reseller_button:", err.message);
+      else console.log("✅ Kolom show_upgrade_reseller_button berhasil ditambahkan ke ui_config");
+    });
+  }
+});
+
             // Inisialisasi tabel pending_deposits
             db.run(`
                 CREATE TABLE IF NOT EXISTS pending_deposits (
@@ -191,18 +216,19 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
             });
             
             db.run(`
-                CREATE TABLE IF NOT EXISTS ui_config (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    show_trial_button INTEGER DEFAULT 1,
-                    show_sewa_script_button INTEGER DEFAULT 1
-                )
-            `, (err) => {
-                if (err) {
-                    logger.error('❌ Gagal membuat tabel ui_config:', err.message);
-                } else {
-                    logger.info('✅ Tabel ui_config siap');
-                }
-            });
+    CREATE TABLE IF NOT EXISTS ui_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        show_trial_button INTEGER DEFAULT 1,
+        show_sewa_script_button INTEGER DEFAULT 1,
+        show_upgrade_reseller_button INTEGER DEFAULT 1
+    )
+`, (err) => {
+    if (err) {
+        logger.error('❌ Gagal membuat tabel ui_config:', err.message);
+    } else {
+        logger.info('✅ Tabel ui_config siap');
+    }
+});
 
             db.run(`
                 INSERT OR IGNORE INTO ui_config (id, show_trial_button, show_sewa_script_button)
@@ -407,6 +433,13 @@ async function sendMainMenu(ctx) {
   const userId = ctx.from.id;
   const chatId = ctx.chat.id; // Dapatkan chatId di sini
 
+const showUpgradeReseller = await new Promise((resolve) => {
+  db.get('SELECT show_upgrade_reseller_button FROM ui_config WHERE id = 1', (err, row) => {
+    if (err) return resolve(true); // Default aktif kalau error
+    resolve(row?.show_upgrade_reseller_button === 1);
+  });
+});
+
   // --- LOGIKA PENGHAPUSAN MENU SEBELUMNYA (DIPINDAHKAN KE SINI) ---
   if (lastMenus[userId]) {
     try {
@@ -544,21 +577,21 @@ async function sendMainMenu(ctx) {
 
   // Pesan utama dengan format yang sudah padat dan rapi
   const messageText = `
-━━━━━━━━━━━━━━━━━━━━━━━━
-≡                    <b>ROBOT VPN</b>                      ≡
-━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
+≡                         <b>ROBOT VPN</b>                           ≡
+━━━━━━━━━━━━━━━━━━━━━━
 Selamat datang di <b>${NAMA_STORE}</b> 🚀
 Bot otomatis untuk membeli Akun VPN dengan mudah dan cepat.
-━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
 💲 <b>» Saldo:</b> <code>Rp.${saldo.toLocaleString('id-ID')}</code>
-━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
 ${statusText}
 🌐 <b>» Username:</b> ${userName}
 📋 <b>» Your ID:</b> <code>${userId}</code>
 ♻️ <b>» Bot Aktif:</b> <code>${uptimeFormatted}</code>
 ✨ <b>» Trial 2x Sehari</b>
 🥇 <b>» Support Wildcard & Enhanced</b>
-━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
 <blockquote>📚 <b>Statistik Anda</b>
 » Hari Ini: ${userToday} akun
 » Minggu Ini: ${userWeek} akun
@@ -568,23 +601,30 @@ ${statusText}
 » Hari Ini: ${globalToday} akun
 » Minggu Ini: ${globalWeek} akun
 » Bulan Ini: ${globalMonth} akun</blockquote>
-━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
 🧭 <b>» Waktu:</b> <code>${timeNow} WIB</code>
 🏷️ <b>» Tanggal:</b> <code>${currentDay}, ${currentDate}</code>
 🏷️ <b>» Server:</b> <code>${jumlahServer}</code> <b>|️ Total User:</b> <code>${jumlahPengguna}</code>
 ☎️ <b>» Contact Admin:</b> <a href="https://t.me/kytxz">@kytxz</a>
-━━━━━━━━━━━━━━━━━━━━━━━━`;
+━━━━━━━━━━━━━━━━━━━━━━`;
 
 
   const keyboard = [];
 
-  if (bolehLihatTrial) {
-    keyboard.push([{ text: '💠 Trial Akun', callback_data: 'service_trial' }]);
-  }
+if (bolehLihatTrial) {
+  keyboard.push([{ text: '💠 Trial Akun', callback_data: 'service_trial' }]);
+}
+keyboard.push([
+  { text: '✏️ Buat Akun', callback_data: 'service_create' },
+  { text: '♻️ Renew Akun', callback_data: 'service_renew' }
+]);
+keyboard.push([{ text: '🛒 Sewa Script', callback_data: 'service_sewascript' }]);
+keyboard.push([{ text: '💰 TopUp Saldo', callback_data: 'menu_topup' }]);
 
-  keyboard.push([{ text: '✏️ Buat Akun', callback_data: 'service_create' }, { text: '♻️ Renew Akun', callback_data: 'service_renew' }]);
-  keyboard.push([{ text: '🛒 Sewa Script', callback_data: 'service_sewascript' }]);
-  keyboard.push([{ text: '💰 TopUp Saldo', callback_data: 'menu_topup' }]);
+// Tambahkan tombol upgrade reseller sesuai status DB & role user
+if (userRole !== 'reseller' && showUpgradeReseller) {
+  keyboard.push([{ text: '🚀 Upgrade Reseller', callback_data: 'upgrade_reseller' }]);
+}
 
 
   try {
@@ -727,6 +767,90 @@ bot.command('broadcast', async (ctx) => {
 function formatRupiah(angka) {
   return `Rp${(angka || 0).toLocaleString('id-ID')}`;
 }
+
+bot.action(/^listsaldo_(\d+)$/, async (ctx) => {
+  const page = parseInt(ctx.match[1]);
+
+  // Hindari error jika message tidak bisa diedit
+  try {
+    await ctx.answerCbQuery();
+    await sendPaginatedUserSaldo(ctx, page, true); // isEdit = true
+  } catch (e) {
+    console.error('Gagal proses pagination:', e);
+  }
+});
+
+
+bot.action('upgrade_reseller', async (ctx) => {
+  await ctx.answerCbQuery();
+  const userId = ctx.from.id;
+  const chatId = ctx.chat.id;
+
+  // Cek jika user admin
+  if (adminIds.includes(userId)) {
+    // Hapus menu lama jika ada
+    if (lastMenus[userId]) {
+      try {
+        await ctx.telegram.deleteMessage(chatId, lastMenus[userId]);
+        delete lastMenus[userId];
+      } catch (e) {}
+    }
+    // Info khusus admin
+    const sent = await ctx.reply(
+      '👑 Anda adalah *Admin*, tidak perlu melakukan upgrade reseller!\n\n' +
+      'Semua fitur reseller dan admin sudah tersedia untuk Anda.',
+      { parse_mode: 'Markdown' }
+    );
+    if (sent?.message_id) lastMenus[userId] = sent.message_id;
+    return;
+  }
+
+  // ... kode lama untuk member/reseller tetap di bawah ...
+  if (lastMenus[userId]) {
+    try {
+      await ctx.telegram.deleteMessage(chatId, lastMenus[userId]);
+      delete lastMenus[userId];
+    } catch (e) {}
+  }
+  
+  const sent = await ctx.reply(
+    `🚀 *Upgrade ke Reseller*\n\n` +
+    `- Deposit Awal: "Rp${UPGRADE_RESELLER_TOPUP_THRESHOLD.toLocaleString('id-ID')}"\n` +
+    `- Bisa buat config sendiri\n` +
+    `- Minimal 3x transaksi/bulan\n` +
+    `- Tidak ada refund\n\n` +
+    `⚠️ *Penting:*\n` +
+    `- Kurang dari 3 trx/bulan = auto-downgrade\n` +
+    `- Pelanggaran = banned permanen\n\n` +
+    `🔸 *Keuntungan Reseller:*\n` +
+    `- Harga akun lebih murah\n` +
+    `- Bisa jualan akun VPN dan untung\n` +
+    `- Dapat bonus dari topup member\n\n` +
+    `Tertarik jadi reseller? Klik tombol di bawah untuk melanjutkan.`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: `💳 Topup "Rp${UPGRADE_RESELLER_TOPUP_THRESHOLD.toLocaleString('id-ID')}" (Upgrade Reseller)`, callback_data: 'upgrade_reseller_pay' }],
+          [{ text: '🔙 Kembali', callback_data: 'send_main_menu' }]
+        ]
+      }
+    }
+  );
+  if (sent?.message_id) lastMenus[userId] = sent.message_id;
+});
+
+bot.action('upgrade_reseller_pay', async (ctx) => {
+  await ctx.answerCbQuery();
+  const userId = ctx.from.id;
+  // Hapus menu sebelumnya jika ada
+  if (lastMenus[userId]) {
+    try { await ctx.telegram.deleteMessage(ctx.chat.id, lastMenus[userId]); delete lastMenus[userId]; } catch (e) {}
+  }
+  await ctx.reply('⏳ Membuat QRIS pembayaran upgrade reseller...');
+  await processDeposit(ctx, UPGRADE_RESELLER_TOPUP_THRESHOLD);  // Fungsi ini sudah ada di bot Anda untuk QRIS
+});
+
 bot.action(/^batal_topup_(.+)$/, async (ctx) => {
   const uniqueCode = ctx.match[1];
   const deposit = global.pendingDeposits[uniqueCode];
@@ -780,6 +904,7 @@ bot.action(/^batal_topup_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('Gagal batal topup.', { show_alert: true });
   }
 });
+
 
 bot.action('statistik_penjualan', async (ctx) => {
   await ctx.answerCbQuery();
@@ -1461,12 +1586,29 @@ bot.action(/toggle_sewascript_btn_(on|off)/, async (ctx) => {
     });
 });
 
+bot.action(/^toggle_upgrade_reseller_btn_(on|off)$/, async (ctx) => {
+  try {
+    const mode = ctx.match[1];
+    if (!adminIds.includes(ctx.from.id)) return;
+    const newStatus = mode === 'on' ? 1 : 0;
+
+    db.run('UPDATE ui_config SET show_upgrade_reseller_button = ? WHERE id = 1', [newStatus], async (err) => {
+      if (err) return ctx.answerCbQuery('❌ Gagal mengubah status.');
+      await ctx.answerCbQuery('✅ Status tombol Upgrade Reseller diperbarui.');
+      try { await ctx.telegram.deleteMessage(ctx.chat.id, ctx.callbackQuery.message.message_id); } catch (e) {}
+      await sendAdminMenu(ctx);
+    });
+  } catch (error) {
+    logger.error('❌ ERROR toggle_upgrade_reseller_btn:', error.message);
+    await ctx.answerCbQuery('❌ Terjadi kesalahan.');
+  }
+});
+
 async function sendAdminMenu(ctx) {
     const config = loadButtonConfig();
     const userId = ctx.from.id;
     const chatId = ctx.chat.id;
-
-
+    
     const showTrial = await new Promise((resolve) => {
     db.get('SELECT show_trial_button FROM ui_config WHERE id = 1', (err, row) => {
         if (err) {
@@ -1496,7 +1638,13 @@ const showSewaScript = await new Promise((resolve) => {
         resolve(row.show_sewa_script_button === 1 ? 1 : 0);
     });
 });
-
+// Ambil status tombol upgrade reseller dari database dulu!
+const showUpgradeReseller = await new Promise((resolve) => {
+  db.get('SELECT show_upgrade_reseller_button FROM ui_config WHERE id = 1', (err, row) => {
+    if (err) return resolve(true); // Default aktif kalau error
+    resolve(row?.show_upgrade_reseller_button === 1);
+  });
+});
     const adminKeyboard = [
         [{ text: '✏️ Tambah Server', callback_data: 'addserver' }, { text: '❌ Hapus Server', callback_data: 'deleteserver' }],
         [{ text: '💲 Edit Harga', callback_data: 'editserver_harga' }, { text: '📝 Edit Nama', callback_data: 'nama_server_edit' }],
@@ -1509,7 +1657,7 @@ const showSewaScript = await new Promise((resolve) => {
         [{ text: `${config.topup_saldo ? '✅' : '❌'} Topup QRIS Orkut`, callback_data: 'toggle_topup_saldo' }, { text: `${config.topup_saweria ? '✅' : '❌'} Topup QRIS Saweria`, callback_data: 'toggle_topup_saweria' }],
         [{text: `${showTrial ? '✅' : '❌'} Tombol Trial`, callback_data: `toggle_trial_btn_${showTrial ? 'off' : 'on'}`}, {text: `${showSewaScript ? '✅' : '❌'} Tombol Sewa Script`, callback_data: `toggle_sewascript_btn_${showSewaScript ? 'off' : 'on'}`}],
         [{ text: '📈 Hasil Penjualan', callback_data: 'statistik_penjualan' }, { text: '📑 Log Topup', callback_data: 'log_topup' }],
-        [{ text: '👥 List Reseller', callback_data: 'listreseller' }],
+        [{ text: '👥 List Reseller', callback_data: 'listreseller' }, { text: `${showUpgradeReseller ? '✅' : '❌'} Tombol Upgrade Reseller`, callback_data: `toggle_upgrade_reseller_btn_${showUpgradeReseller ? 'off' : 'on'}` }], 
         [{ text: '🔙 Kembali', callback_data: 'send_main_menu' }]
     ];
 
@@ -5247,6 +5395,36 @@ async function sendPaymentSuccessNotificationByUserId(userId, deposit, currentBa
       }
     }
 
+// === [UPGRADE TO RESELLER via TOPUP] ===
+try {
+  const row = await new Promise((resolve, reject) => {
+    db.get('SELECT role FROM users WHERE user_id = ?', [userId], (err, row) => {
+      if (err) reject(err); else resolve(row);
+    });
+  });
+
+  if (row && row.role !== 'reseller' && deposit.originalAmount >= UPGRADE_RESELLER_TOPUP_THRESHOLD) {
+    db.run("UPDATE users SET role = 'reseller' WHERE user_id = ?", [userId], (err) => {
+      if (!err) {
+        bot.telegram.sendMessage(userId, 
+          '🎉 Selamat! Karena topup kamu ≥ Rp30.000, akunmu otomatis di-upgrade menjadi *Reseller*! Nikmati harga khusus & fitur reseller.',
+          { parse_mode: 'Markdown' }
+        );
+        if (ADMIN) {
+          bot.telegram.sendMessage(ADMIN, 
+            `📢 User @${username || userId} (${userId}) otomatis di-upgrade Reseller via Topup.`, 
+            { parse_mode: 'Markdown' }
+          );
+        }
+        logger.info(`[UPGRADE] User ${userId} berhasil upgrade reseller otomatis via topup.`);
+      }
+    });
+  }
+} catch(e) {
+  logger.error('Gagal auto-upgrade reseller via topup:', e.message);
+}
+// === [END UPGRADE to Reseller] ===
+
     return true;
   } catch (error) {
     logger.error('❌ Error sending payment notification (by userId):', error);
@@ -5671,6 +5849,7 @@ bot.on('callback_query', async (ctx) => {
       }
   }
 });
+
 
 bot.command('listsaldo', async (ctx) => {
   if (!adminIds.includes(ctx.from.id)) {
