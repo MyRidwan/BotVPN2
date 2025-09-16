@@ -94,13 +94,13 @@ server_app() {
     while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " apikey; done
     
     read -p "Masukkan Chat ID Group Telegram: " chatid_group
-    while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " chatid_group; done
+    while [ -z "$chatid_group" ]; do read -p "Masukkan CHAT ID GRUP: " chatid_group; done
     
-#    read -p "Masukkan Username Saweria: " username_saweria
-#    while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " username_saweria; done
+    read -p "Masukkan Username Grup ( @myridtunnel ): " username_grup
+    while [ -z "$username_grup" ]; do read -p "Masukkan USERNAME GRUP: " username_grup; done
     
-#    read -p "Masukkan Email Saweria: " saweria_email
-#    while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " saweria_email; done
+    read -p "Masukkan Nomor Wa ( 62xxxxx ) : " nomor_wa
+    while [ -z "$nomor_wa" ]; do read -p "Masukkan NOMOR WA: " nomor_wa; done
 
     # Simpan konfigurasi ke file .vars.json
     cat >/root/BotVPN2/.vars.json <<EOF
@@ -112,9 +112,9 @@ server_app() {
 #  "DATA_QRIS": "$dataqris",
 #  "MERCHANT_ID": "$merchantid",
   "API_KEY": "$apikey",
-  "GROUP_CHAT_ID": "$chatid_group"
-#  "SAWERIA_USERNAME": "username_saweria",
-#  "SAWERIA_EMAIL": "$saweria_email"
+  "GROUP_CHAT_ID": "$chatid_group",
+  "ADMIN_WA": "nomor_wa",
+  "GROUP_USERNAME": "$username_grup"
 }
 EOF
 

@@ -58,17 +58,15 @@ const {
 const fs = require('fs');
 const vars = JSON.parse(fs.readFileSync('./.vars.json', 'utf8'));
 
-const SAWERIA_USERNAME = vars.SAWERIA_USERNAME;
-const SAWERIA_EMAIL = vars.SAWERIA_EMAIL;
-
 const BOT_TOKEN = vars.BOT_TOKEN;
-const port = vars.PORT || 50123;
 const ADMIN = vars.USER_ID;
+const port = vars.PORT || 50123;
 const NAMA_STORE = vars.NAMA_STORE || 'XWANSTORE';
-const DATA_QRIS = vars.DATA_QRIS;
-const MERCHANT_ID = vars.MERCHANT_ID;
 const API_KEY = vars.API_KEY;
 const groupId = vars.GROUP_CHAT_ID;
+const ADMIN_WA = vars.ADMIN_WA;
+const GROUP_USERNAME = vars.GROUP_USERNAME;
+
 
 const bot = new Telegraf(BOT_TOKEN);
 const adminIds = ADMIN;
@@ -334,6 +332,28 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
         }); // End of db.serialize
     }
 });
+// --- Helper: Insert/Delete Pending Deposit ---
+function insertPendingDeposit(transactionId, userId, username, totalAmount, originalAmount, qrMessageId) {
+  return new Promise((resolve, reject) => {
+    db.run(`
+      INSERT INTO pending_deposits (unique_code, user_id, username, amount, original_amount, timestamp, status, qr_message_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [transactionId, userId, username, totalAmount, originalAmount, Date.now(), 'pending', qrMessageId],
+    function (err) {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+
+function deletePendingDeposit(transactionId) {
+  return new Promise((resolve, reject) => {
+    db.run(`DELETE FROM pending_deposits WHERE unique_code = ?`, [transactionId], function (err) {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
 
 const lastMenus = {};
 const userState = {};
@@ -751,7 +771,7 @@ bot.command('broadcast', async (ctx) => {
             reply_markup: {
               inline_keyboard: [
                 [
-                  { text: "🌐 WhatsApp Admin", url: "https://wa.me/6281774970898" }
+                  { text: "🌐 WhatsApp Admin", url: "https://wa.me/${ADMIN_WA}" }
                 ]
               ]
             }
@@ -801,54 +821,28 @@ bot.command('broadcast', async (ctx) => {
 function formatRupiah(angka) {
   return `Rp${(angka || 0).toLocaleString('id-ID')}`;
 }
+// --- Handle Cancel Deposit ---
 bot.action(/^batal_topup_(.+)$/, async (ctx) => {
-  const uniqueCode = ctx.match[1];
-  const deposit = global.pendingDeposits[uniqueCode];
+  const transactionId = ctx.match[1];
+  const deposit = global.pendingDeposits[transactionId];
 
   if (!deposit) {
     return ctx.answerCbQuery('Transaksi sudah tidak aktif atau telah dibatalkan.', { show_alert: true });
   }
 
   try {
-    // Hapus pesan QR
     if (deposit.qrMessageId) {
-      try {
-        await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId);
-      } catch (e) {}
+      await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId).catch(() => {});
     }
 
-    // Hapus dari pending
-    delete global.pendingDeposits[uniqueCode];
-    await deletePendingDeposit(uniqueCode);
+    delete global.pendingDeposits[transactionId];
+    await deletePendingDeposit(transactionId);
 
     await ctx.answerCbQuery('Topup dibatalkan.');
-
-    // ===== Kirim pesan dengan tombol kembali =====
-    await ctx.reply('❌ Topup QRIS Orkut telah dibatalkan. Silahkan topup ulang jika ingin mencoba lagi.', {
+    await ctx.reply('❌ Topup QRIS dibatalkan. Silahkan topup ulang jika ingin mencoba lagi.', {
       parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🔙 Kembali ke Menu Top-up', callback_data: 'menu_topup' }]
-        ]
-      }
+      reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke Menu Top-up', callback_data: 'menu_topup' }]] }
     });
-    // =============================================
-
-    // Tambahan: hapus pesan command user (jika diperlukan)
-    try {
-      const chatId = ctx.chat.id;
-      const userId = ctx.from.id;
-      // Pastikan ctx.message ada (atau gunakan ctx.update.callback_query.message jika akses via callback)
-      const messageId = ctx.update.callback_query.message?.message_id;
-      if (messageId) {
-        await ctx.telegram.deleteMessage(chatId, messageId);
-        logger.info(`🧹 Pesan command user ${userId} berhasil dihapus`);
-      }
-    } catch (e) {
-      const userId = ctx.from.id;
-      console.warn(`⚠️ Tidak bisa hapus pesan command user ${userId}:`, e.message);
-    }
-
   } catch (e) {
     logger.error('Gagal batal topup:', e);
     await ctx.answerCbQuery('Gagal batal topup.', { show_alert: true });
@@ -4778,59 +4772,26 @@ db.all('SELECT * FROM pending_deposits WHERE status = "pending"', [], (err, rows
 
 const config = {
     storeName: NAMA_STORE,
-    auth_username: MERCHANT_ID,
+//    auth_username: MERCHANT_ID,
     auth_token: API_KEY,
-    baseQrString: DATA_QRIS,
-    logoPath: 'logo.png'
+//    baseQrString: DATA_QRIS,
+//    logoPath: 'logo.png'
 };
 
-const qris = new QRISPayment(config);
+//const qris = new QRISPayment(config);
 
 async function processDeposit(ctx, amount) {
-  const currentTime = Date.now();
-
-  if (currentTime - lastRequestTime < requestInterval) {
-    await ctx.reply('⚠️ *Terlalu banyak permintaan. Silahkan tunggu sebentar sebelum mencoba lagi.*', { parse_mode: 'Markdown' });
-    return;
-  }
-
-  lastRequestTime = currentTime;
-  const userId = ctx.from.id;
-
-  if (!global.pendingDeposits) {
-    global.pendingDeposits = {};
-  }
-
   try {
-    let waitMsg = await ctx.reply("⏳ Mohon menunggu.");
+    const waitMsg = await ctx.reply("⏳ Mohon menunggu...");
 
-    const dots = [".", "..", "...", " "];
-    let i = 0;
-    const interval = setInterval(async () => {
-      i = (i + 1) % dots.length;
-      try {
-        await ctx.telegram.editMessageText(
-          ctx.chat.id,
-          waitMsg.message_id,
-          null,
-          `⏳ Mohon menunggu${dots[i]}`
-        );
-      } catch (e) {
-        clearInterval(interval);
-      }
-    }, 1000);
-
-    // kasih efek loading 5 detik
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    clearInterval(interval);
-
-    // 🔥 Panggil API untuk buat QRIS
+    // 🔥 Panggil API Orkut
     const response = await axios.get(
       `https://my-payment.autsc.my.id/api/deposit?amount=${amount}&apikey=${API_KEY}`
     );
     const result = response.data;
 
     if (result.status !== "success") {
+      logger.error("API Gagal buat QRIS:", result);
       throw new Error("Gagal membuat QRIS: " + JSON.stringify(result));
     }
 
@@ -4851,18 +4812,8 @@ async function processDeposit(ctx, amount) {
       `📌 Jangan tutup halaman ini`;
 
     const inlineKeyboard = [
-      [
-        {
-          text: "📢 Join Channel",
-          url: "https://t.me/myridtunnel"
-        }
-      ],
-      [
-        {
-          text: "❌ Batal Topup",
-          callback_data: `batal_topup_${transactionId}`
-        }
-      ]
+      [{ text: "📢 Join Channel", url: "https://t.me/${GROUP_USERNAME}" }],
+      [{ text: "❌ Batal Topup", callback_data: `batal_topup_${transactionId}` }]
     ];
 
     const qrMessage = await ctx.replyWithPhoto(
@@ -4874,13 +4825,14 @@ async function processDeposit(ctx, amount) {
       }
     );
 
-    await ctx.deleteMessage(waitMsg.message_id);
+    try { await ctx.deleteMessage(waitMsg.message_id); } catch (_) {}
 
     // Simpan ke global
+    if (!global.pendingDeposits) global.pendingDeposits = {};
     global.pendingDeposits[transactionId] = {
       amount: data.total_amount,
       originalAmount: data.amount,
-      userId,
+      userId: ctx.from.id,
       username: ctx.from.username || `user_${ctx.from.id}`,
       timestamp: Date.now(),
       status: "pending",
@@ -4891,27 +4843,22 @@ async function processDeposit(ctx, amount) {
     // Simpan ke DB
     await insertPendingDeposit(
       transactionId,
-      userId,
+      ctx.from.id,
       ctx.from.username || `user_${ctx.from.id}`,
       data.total_amount,
       data.amount,
       qrMessage.message_id
     );
 
-    delete global.depositState[userId];
   } catch (error) {
-    logger.error("❌ Kesalahan saat memproses deposit:", error);
-
-    if (global.depositState && global.depositState[userId]) {
-      delete global.depositState[userId];
-    }
-
+    logger.error("❌ Kesalahan saat memproses deposit:", error.stack || error);
     await ctx.reply(
-      "❌ *GAGAL! Terjadi kesalahan saat memproses pembayaran. Silahkan coba lagi nanti.*",
+      "❌ *GAGAL!* Terjadi kesalahan saat memproses pembayaran. Silahkan coba lagi nanti.",
       { parse_mode: "Markdown" }
     );
   }
 }
+
 
 async function checkQRISStatus() {
   try {
