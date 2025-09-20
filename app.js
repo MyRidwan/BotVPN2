@@ -753,7 +753,7 @@ bot.command('broadcast', async (ctx) => {
             reply_markup: {
               inline_keyboard: [
                 [
-                  { text: "🌐 WhatsApp Admin", url: "https://wa.me/${ADMIN_WA}" }
+                  { text: "🌐 WhatsApp Admin", url: `https://wa.me/${ADMIN_WA}` }
                 ]
               ]
             }
@@ -4838,7 +4838,7 @@ const inlineKeyboard = [
   [
     {
       text: "📢 Join Channel",
-      url: "https://t.me/${GROUP_USERNAME}"
+      url: `https://t.me/${GROUP_USERNAME}`
     }
   ],
   [
