@@ -96,7 +96,7 @@ server_app() {
     read -p "Masukkan Chat ID Group Telegram: " chatid_group
     while [ -z "$chatid_group" ]; do read -p "Masukkan CHAT ID GRUP: " chatid_group; done
     
-    read -p "Masukkan Username Grup ( @myridtunnel ): " username_grup
+    read -p "Masukkan Username Grup ( myridtunnel ): " username_grup
     while [ -z "$username_grup" ]; do read -p "Masukkan USERNAME GRUP: " username_grup; done
     
     read -p "Masukkan Nomor Wa ( 62xxxxx ) : " nomor_wa
@@ -111,7 +111,7 @@ server_app() {
   "PORT": "50123",
   "API_KEY": "$apikey",
   "GROUP_CHAT_ID": "$chatid_group",
-  "ADMIN_WA": "nomor_wa",
+  "ADMIN_WA": "$nomor_wa",
   "GROUP_USERNAME": "$username_grup"
 }
 EOF
