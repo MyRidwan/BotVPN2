@@ -72,7 +72,7 @@ server_app() {
     echo -e "${orange}─────────────────────────────────────────${neutral}"
     echo -e "${green}- BOT SELLVPN TELEGRAM MOD BY LITE & XWAN${neutral}"
     echo -e "${green}- BOT KHUSUS MEMBER YG GA PUNYA ORKUT${neutral}"
-    echo -e "${green}- AMBIL APIKEY DI https://t.me/payment_rfbot${neutral}"
+    echo -e "${green}- AMBIL APIKEY DI https://t.me/Xwan_Payment_Bot${neutral}"
     echo -e "${orange}─────────────────────────────────────────${neutral}"
 
     read -p "Masukkan token bot: " token

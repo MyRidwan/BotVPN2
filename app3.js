@@ -995,7 +995,7 @@ async function processDepositSaweria(ctx, amount) {
     }
 
     const amountInt = parseInt(amount);
-    const apiUrl = `https://saweria.autsc.my.id/api/create?username=${encodeURIComponent(SAWERIA_USERNAME)}&amount=${amountInt}&email=${encodeURIComponent(SAWERIA_EMAIL)}`;
+    const apiUrl = `http://pymnt-xwan.gloryx.web.id/api/create?username=${encodeURIComponent(SAWERIA_USERNAME)}&amount=${amountInt}&email=${encodeURIComponent(SAWERIA_EMAIL)}`;
 
     const res = await axios.get(apiUrl);
     const result = res.data;
@@ -1090,7 +1090,7 @@ setInterval(async () => {
 
       // ✅ Cek status pembayaran
       try {
-        const res = await axios.get(`https://saweria.autsc.my.id/check-payment?idtransaksi=${idtrx}`);
+        const res = await axios.get(`http://pymnt-xwan.gloryx.web.id/check-payment?idtransaksi=${idtrx}`);
         const data = res.data;
 
         logger.info(`Respons Saweria check-payment untuk ${idtrx}: ${JSON.stringify(data)}`);
