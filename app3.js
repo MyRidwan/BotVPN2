@@ -583,36 +583,57 @@ async function sendMainMenu(ctx) {
 
   // Pesan utama dengan format yang sudah padat dan rapi
   const messageText = `
-╔══════════════════════╗
-≡                    <b>✨ANSENDANT VPN✨</b>                      ≡
-╚══════════════════════╝
-<blockquote>Selamat datang di <b>${NAMA_STORE}</b> 🚀
-Bot otomatis untuk membeli Akun VPN dengan mudah dan cepat.</blockquote>
-╔══════════════════════╗
-╟🫧 <b>» Saldo:</b> <code>Rp.${saldo.toLocaleString('id-ID')}</code>            ║
-╟══════════════════════╝
-╟${statusText}
-╟🌏 <b>» Username:</b> ${userName}
-╟📋 <b>» Your ID:</b> <code>${userId}</code>
-╟♻️ <b>» Bot Aktif:</b> <code>${uptimeFormatted}</code>
-╟✨ <b>» Trial 2x Sehari</b>
-╟🥇 <b>» Support Wildcard & Enhanced</b>
-╟══════════════════════
-╟📚 <b>Statistik Anda</b>
-╟» Hari Ini: ${userToday} akun
-╟» Minggu Ini: ${userWeek} akun
-╟» Bulan Ini: ${userMonth} akun
-║
-╟🌏 <b>Statistik Global</b>
-╟» Hari Ini: ${globalToday} akun
-╟» Minggu Ini: ${globalWeek} akun
-╟» Bulan Ini: ${globalMonth} akun
-╟══════════════════════╗
-╟🧭 <b>» Waktu:</b> <code>${timeNow} WIB</code>
-╟🏷️ <b>» Tanggal:</b> <code>${currentDay}, ${currentDate}</code>
-╟🏷️ <b>» Server:</b> <code>${jumlahServer}</code> <b>|️ Total User:</b> <code>${jumlahPengguna}</code>
-╟☎️ <b>» Contact Admin:</b> <a href="https://t.me/${adminUsername}">@${adminUsername}</a>
-╚══════════════════════╝`;
+📦━━━━━━━━━━━━━━━━━━━━━📦
+      <b>✨ 🄰🄽🅂🄴🄽🄳🄰🄽🅃 🅅🄿🄽 ✨</b>
+📦━━━━━━━━━━━━━━━━━━━━━📦
+
+<blockquote>ꜱᴇʟᴀᴍᴀᴛ ᴅᴀᴛᴀɴɢ ᴅɪ <b>${NAMA_STORE}</b> 💎
+ɴɪᴋᴍᴀᴛɪ ᴘᴇɴɢᴀʟᴀᴍᴀɴ ᴍᴇᴍʙᴇʟɪ ᴀᴋᴜɴ ᴠᴘɴ ᴛᴇʀᴄᴇᴘᴀᴛ, ᴀᴍᴀɴ, ᴅᴀɴ ᴀᴜᴛᴏᴍᴀᴛɪꜱ 🚀</blockquote>
+
+🧭 <b>ɪɴꜰᴏʀᴍᴀꜱɪ ᴀᴋᴜɴ</b>
+┏━━━━━━━━━━━━━━━━━━━━━┓
+┃ 💰 <b>ꜱᴀʟᴅᴏ:</b> <code>Rp.${saldo.toLocaleString('id-ID')}</code>
+┃ ${statusText}
+┃ 🌐 <b>ᴜꜱᴇʀɴᴀᴍᴇ:</b> ${userName}
+┃ 🆔 <b>ɪᴅ ᴘᴇɴɢɢᴜɴᴀ:</b> <code>${userId}</code>
+┃ ⏱️ <b>ʙᴏᴛ ᴀᴋᴛɪꜰ:</b> <code>${uptimeFormatted}</code>
+┗━━━━━━━━━━━━━━━━━━━━━┛
+
+🎯 <b>ꜰɪᴛᴜʀ & ᴋᴇᴜɴɢɢᴜʟᴀɴ</b>
+┏━━━━━━━━━━━━━━━━━━━━━┓
+┃ ✨ ᴛʀɪᴀʟ 2x ꜱᴇʜᴀʀɪ
+┃ 🔐 ꜱᴜᴘᴘᴏʀᴛ ᴡɪʟᴅᴄᴀʀᴅ & ᴇɴʜᴀɴᴄᴇᴅ
+┃ ⚡ ꜱɪꜱᴛᴇᴍ ᴄᴇᴘᴀᴛ & ꜱᴛᴀʙɪʟ
+┗━━━━━━━━━━━━━━━━━━━━━┛
+
+📊 <b>ꜱᴛᴀᴛɪꜱᴛɪᴋ ᴀɴᴅᴀ</b>
+┏━━━━━━━━━━━━━━━━━━━━━┓
+┃ 📆 ʜᴀʀɪ ɪɴɪ: ${userToday} ᴀᴋᴜɴ
+┃ 📅 ᴍɪɴɢɢᴜ ɪɴɪ: ${userWeek} ᴀᴋᴜɴ
+┃ 🗓️ ʙᴜʟᴀɴ ɪɴɪ: ${userMonth} ᴀᴋᴜɴ
+┗━━━━━━━━━━━━━━━━━━━━━┛
+
+🌍 <b>ꜱᴛᴀᴛɪꜱᴛɪᴋ ɢʟᴏʙᴀʟ</b>
+┏━━━━━━━━━━━━━━━━━━━━━┓
+┃ 📆 ʜᴀʀɪ ɪɴɪ: ${globalToday} ᴀᴋᴜɴ
+┃ 📅 ᴍɪɴɢɢᴜ ɪɴɪ: ${globalWeek} ᴀᴋᴜɴ
+┃ 🗓️ ʙᴜʟᴀɴ ɪɴɪ: ${globalMonth} ᴀᴋᴜɴ
+┗━━━━━━━━━━━━━━━━━━━━━┛
+
+🕒 <b>ᴡᴀᴋᴛᴜ & ꜱᴇʀᴠᴇʀ</b>
+┏━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🧭 ᴡᴀᴋᴛᴜ: <code>${timeNow} WIB</code>
+┃ 📅 ᴛᴀɴɢɢᴀʟ: <code>${currentDay}, ${currentDate}</code>
+┃ 🖥️ ꜱᴇʀᴠᴇʀ: <code>${jumlahServer}</code> | 👥 ᴜꜱᴇʀ: <code>${jumlahPengguna}</code>
+┗━━━━━━━━━━━━━━━━━━━━━┛
+
+☎️ <b>ʜᴜʙᴜɴɢɪ ᴀᴅᴍɪɴ</b>
+<a href="https://t.me/${adminUsername}">╰📨 @${adminUsername}</a>
+
+📦━━━━━━━━━━━━━━━━━━━━━📦
+     <code>🌐 ᴅɪᴋᴇʟᴏʟᴀ ᴏʟᴇʜ ${NAMA_STORE} ɴᴇᴛᴡᴏʀᴋ</code>
+📦━━━━━━━━━━━━━━━━━━━━━📦
+`;
 
   const keyboard = [];
 
@@ -948,40 +969,85 @@ bot.command('addsaldo', async (ctx) => {
 
 // ========================= MENU TOPUP PILIHAN ==========================
 bot.action('menu_topup', async (ctx) => {
-  await ctx.answerCbQuery();
-
-  // Hapus pesan menu topup sebelumnya jika ada
   try {
-    if (ctx.callbackQuery?.message?.message_id) {
-      await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
+    await ctx.answerCbQuery();
+
+    const userId = ctx.from.id;
+    
+    // ...lanjutkan kode seperti biasa...
+
+
+    // Hapus pesan sebelumnya
+    try {
+      if (ctx.callbackQuery?.message?.message_id) {
+        await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
+      }
+    } catch (err) {
+      console.warn("⚠️ Gagal hapus pesan lama:", err.message);
     }
-  } catch (e) {
-    // ignore error
-  }
 
-  const config = loadButtonConfig ? loadButtonConfig() : { topup_saldo: true, topup_saweria: true };
-  const keyboard = [];
-  if (config.topup_saldo)
-    keyboard.push([{ text: "💸 Topup QRIS Orkut", callback_data: "topup_saldo" }]);
-  if (config.topup_saweria)
-    keyboard.push([{ text: "💸 Topup QRIS Saweria", callback_data: "topup_saweria" }]);
-  keyboard.push([{ text: "🔙 Kembali", callback_data: "send_main_menu" }]);
+    // Ambil username admin
+    let adminUsername = 'Admin';
+    try {
+      const adminChat = await bot.telegram.getChat(ADMIN);
+      if (adminChat.username) adminUsername = adminChat.username;
+    } catch (e) {
+      console.warn('⚠️ Gagal ambil username admin:', e.message);
+    }
 
-  // ...generate messageText sesuai menu_topup lama...
-  const messageText = `
-━━━━━━━━━━━━━━━━━━━━━━
-        🏷️ *≡ BOT PANEL VPN ≡* 🏷️
-━━━━━━━━━━━━━━━━━━━━━━
-💸 *» Pilih Menu Topup Dibawah Ini:*`;
+    const NAMA_STORE = vars?.NAMA_STORE || 'XWANSTORE';
+    const config = loadButtonConfig ? loadButtonConfig() : { topup_saldo: true, topup_saweria: true };
 
-  const sent = await ctx.reply(messageText, {
-    parse_mode: 'Markdown',
-    reply_markup: { inline_keyboard: keyboard }
-  });
+    const keyboard = [];
+    if (config.topup_saldo)
+      keyboard.push([{ text: "💸 Topup QRIS Orkut", callback_data: "topup_saldo" }]);
+    if (config.topup_saweria)
+      keyboard.push([{ text: "💸 Topup QRIS Saweria", callback_data: "topup_saweria" }]);
+    keyboard.push([{ text: "🔙 Kembali ke Menu Utama", callback_data: "send_main_menu" }]);
 
-  // Tracking pesan topup yang terakhir (opsional, jika ingin hapus lagi setelahnya)
-  if (sent?.message_id) {
-    lastMenus[ctx.from.id] = sent.message_id;
+    // 🧭 Tampilan aman + small caps elegan
+    const messageText = `
+📦━━━━━━━━━━━━━━━━━━━━📦
+      <b>⚡ ANSENDANT VPN ⚡</b>
+📦━━━━━━━━━━━━━━━━━━━━📦
+
+💳 <b>ᴍᴇɴᴜ ᴛᴏᴘ-ᴜᴘ ꜱᴀʟᴅᴏ</b>  
+ᴘɪʟɪʜ ᴍᴇᴛᴏᴅᴇ ᴛᴏᴘ-ᴜᴘ ʏᴀɴɢ ᴋᴀᴍᴜ ɪɴɢɪɴᴋᴀɴ ᴅɪ ʙᴀᴡᴀʜ ɪɴɪ ⤵️
+
+┏━━━━━━━━━━━━━━━━━━━┓
+┃ 💸 <b>Qʀɪꜱ Oʀᴋᴜᴛ</b> — ᴘʀᴏꜱᴇꜱ ᴀᴜᴛᴏᴍᴀᴛɪꜱ  
+┃ 💸 <b>Qʀɪꜱ Sᴀᴡᴇʀɪᴀ</b> — ᴠᴇʀɪꜰɪᴋᴀꜱɪ ᴄᴇᴘᴀᴛ  
+┗━━━━━━━━━━━━━━━━━━━┛
+
+📘 <b>ᴛᴀᴛᴀ ᴄᴀʀᴀ ᴛᴏᴘ-ᴜᴘ</b>  
+1️⃣ ᴋʟɪᴋ ᴛᴏᴍʙᴏʟ ᴍᴇᴛᴏᴅᴇ ᴘᴇᴍʙᴀʏᴀʀᴀɴ ᴅɪ ʙᴀᴡᴀʜ.  
+2️⃣ ꜱᴄᴀɴ ᴋᴏᴅᴇ Qʀ ᴀᴛᴀᴜ ꜱᴀʟɪɴ ʟɪɴᴋ ᴘᴇᴍʙᴀʏᴀʀᴀɴ.  
+3️⃣ ʟᴀᴋᴜᴋᴀɴ ᴘᴇᴍʙᴀʏᴀʀᴀɴ ꜱᴇꜱᴜᴀɪ ɴᴏᴍɪɴᴀʟ.  
+4️⃣ ᴛᴜɴɢɢᴜ ±1 ᴍᴇɴɪᴛ, ꜱᴀʟᴅᴏ ᴀᴋᴀɴ ᴍᴀꜱᴜᴋ ᴀᴜᴛᴏᴍᴀᴛɪꜱ.  
+5️⃣ ᴊɪᴋᴀ ʙᴇʟᴜᴍ ᴍᴀꜱᴜᴋ, ʜᴜʙᴜɴɢɪ ᴀᴅᴍɪɴ ᴅᴇɴɢᴀɴ ʙᴜᴋᴛɪ ᴛʀᴀɴꜱᴀᴋꜱɪ.  
+
+☎️ <b>ʜᴜʙᴜɴɢɪ ᴀᴅᴍɪɴ:</b>  
+╰<a href="https://t.me/${adminUsername}">@${adminUsername}</a>
+
+📦━━━━━━━━━━━━━━━━━━━━📦
+     <code>🌐 ᴅɪᴋᴇʟᴏʟᴀ ᴏʟᴇʜ ${NAMA_STORE} ɴᴇᴛᴡᴏʀᴋ</code>
+📦━━━━━━━━━━━━━━━━━━━━📦
+`;
+
+
+    const sent = await ctx.reply(messageText, {
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: keyboard },
+      disable_web_page_preview: true
+    });
+
+    if (sent?.message_id) {
+      lastMenus[ctx.from.id] = sent.message_id;
+    }
+
+  } catch (err) {
+    console.error("❌ Error di menu_topup:", err);
+    await ctx.reply("⚠️ Gagal menampilkan menu TopUp. Silakan coba lagi.");
   }
 });
 
@@ -995,7 +1061,7 @@ async function processDepositSaweria(ctx, amount) {
     }
 
     const amountInt = parseInt(amount);
-    const apiUrl = `https://my-payment.autosc.my.id/api/create?username=${encodeURIComponent(SAWERIA_USERNAME)}&amount=${amountInt}&email=${encodeURIComponent(SAWERIA_EMAIL)}`;
+    const apiUrl = `https://my-payment.autsc.my.id/api/create?username=${encodeURIComponent(SAWERIA_USERNAME)}&amount=${amountInt}&email=${encodeURIComponent(SAWERIA_EMAIL)}`;
 
     const res = await axios.get(apiUrl);
     const result = res.data;
@@ -1090,7 +1156,7 @@ setInterval(async () => {
 
       // ✅ Cek status pembayaran
       try {
-        const res = await axios.get(`https://my-payment.autosc.my.id/check-payment?idtransaksi=${idtrx}`);
+        const res = await axios.get(`https://my-payment.autsc.my.id/check-payment?idtransaksi=${idtrx}`);
         const data = res.data;
 
         logger.info(`Respons Saweria check-payment untuk ${idtrx}: ${JSON.stringify(data)}`);
@@ -4786,7 +4852,7 @@ async function processDeposit(ctx, amount) {
 
     // 🔥 Panggil API Orkut
     const response = await axios.get(
-      `https://my-payment.autosc.my.id/api/deposit?amount=${amount}&apikey=${API_KEY}`
+      `https://my-payment.autsc.my.id/api/deposit?amount=${amount}&apikey=${API_KEY}`
     );
     const result = response.data;
 
@@ -4889,7 +4955,7 @@ async function checkQRISStatus() {
       // 🔥 Cek status pembayaran via API
       try {
         const res = await axios.get(
-          `https://my-payment.autosc.my.id/api/status/payment?transaction_id=${transactionId}&apikey=${API_KEY}`
+          `https://my-payment.autsc.my.id/api/status/payment?transaction_id=${transactionId}&apikey=${API_KEY}`
         );
         const status = res.data;
 
