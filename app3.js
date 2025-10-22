@@ -4,7 +4,7 @@ const express = require('express');
 const { Telegraf, session } = require('telegraf');
 const app = express();
 const axios = require('axios');
-const QRISPayment = require('autoft-qris');
+const { QRISGenerator } = require('autoft-qris');
 const winston = require('winston');
 const fetch = require("node-fetch");
 const FormData = require("form-data");
@@ -58,15 +58,19 @@ const {
 const fs = require('fs');
 const vars = JSON.parse(fs.readFileSync('./.vars.json', 'utf8'));
 
+const SAWERIA_USERNAME = vars.SAWERIA_USERNAME;
+const SAWERIA_EMAIL = vars.SAWERIA_EMAIL;
+
 const BOT_TOKEN = vars.BOT_TOKEN;
-const ADMIN = vars.USER_ID;
 const port = vars.PORT || 50123;
+const ADMIN = vars.USER_ID;
 const NAMA_STORE = vars.NAMA_STORE || 'XWANSTORE';
+const DATA_QRIS = vars.DATA_QRIS;
+const MERCHANT_ID = vars.MERCHANT_ID;
 const API_KEY = vars.API_KEY;
 const groupId = vars.GROUP_CHAT_ID;
 const ADMIN_WA = vars.ADMIN_WA;
 const GROUP_USERNAME = vars.GROUP_USERNAME;
-
 
 const bot = new Telegraf(BOT_TOKEN);
 const adminIds = ADMIN;
@@ -332,33 +336,14 @@ const db = new sqlite3.Database('./sellvpn.db', (err) => {
         }); // End of db.serialize
     }
 });
-// --- Helper: Insert/Delete Pending Deposit ---
-function insertPendingDeposit(transactionId, userId, username, totalAmount, originalAmount, qrMessageId) {
-  return new Promise((resolve, reject) => {
-    db.run(`
-      INSERT INTO pending_deposits (unique_code, user_id, username, amount, original_amount, timestamp, status, qr_message_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [transactionId, userId, username, totalAmount, originalAmount, Date.now(), 'pending', qrMessageId],
-    function (err) {
-      if (err) return reject(err);
-      resolve(true);
-    });
-  });
-}
-
-function deletePendingDeposit(transactionId) {
-  return new Promise((resolve, reject) => {
-    db.run(`DELETE FROM pending_deposits WHERE unique_code = ?`, [transactionId], function (err) {
-      if (err) return reject(err);
-      resolve(true);
-    });
-  });
-}
 
 const lastMenus = {};
 const userState = {};
 logger.info('User state initialized');
 
+// =======================
+// Handler /start atau /menu
+// =======================
 bot.command(['start', 'menu'], async (ctx) => {
   logger.info('📥 Perintah /start atau /menu diterima');
 
@@ -373,37 +358,40 @@ bot.command(['start', 'menu'], async (ctx) => {
     console.warn(`⚠️ Tidak bisa hapus pesan command user ${userId}:`, e.message);
   }
 
-  // Cek apakah user sudah ada di database, jika belum, tambahkan
-  db.get('SELECT * FROM users WHERE user_id = ?', [userId], (err, row) => {
-    if (err) {
-      logger.error('❌ Kesalahan saat memeriksa user_id:', err.message);
-      return;
-    }
-    if (!row) {
-      db.run('INSERT INTO users (user_id, role) VALUES (?, ?)', [userId, 'member'], (err) => {
-        if (err) {
-          logger.error('❌ Gagal menyimpan user_id:', err.message);
-        } else {
-          logger.info(`✅ User ID ${userId} berhasil disimpan`);
-        }
-      });
-    } else {
-      logger.info(`ℹ️ User ID ${userId} sudah ada`);
-    }
+  // --- PERBAIKAN: Tunggu DB selesai sebelum kirim menu ---
+  await new Promise((resolve) => {
+    db.get('SELECT * FROM users WHERE user_id = ?', [userId], (err, row) => {
+      if (err) {
+        logger.error('❌ Kesalahan saat memeriksa user_id:', err.message);
+        resolve(); // tetap lanjut
+        return;
+      }
+      if (!row) {
+        db.run('INSERT INTO users (user_id, role) VALUES (?, ?)', [userId, 'member'], (err) => {
+          if (err) logger.error('❌ Gagal menyimpan user_id:', err.message);
+          else logger.info(`✅ User ID ${userId} berhasil disimpan`);
+          resolve();
+        });
+      } else {
+        logger.info(`ℹ️ User ID ${userId} sudah ada`);
+        resolve();
+      }
+    });
   });
 
-  // Panggil sendMainMenu. Fungsi ini sekarang akan mengurus penghapusan menu lama
-  // dan pengiriman menu baru, serta menyimpan message_id-nya.
+  // Panggil sendMainMenu setelah DB selesai
   await sendMainMenu(ctx);
 });
 // --- AKHIR COMMAND /start atau /menu ---
 
 
+// =======================
+// Handler /admin
+// =======================
 bot.command('admin', async (ctx) => {
   logger.info('Admin menu requested');
 
   if (!adminIds.includes(ctx.from.id)) {
-    // Menghapus pesan command /admin jika bukan admin
     try { await ctx.telegram.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch (e) {}
     return ctx.reply('❌ Anda tidak memiliki izin untuk mengakses menu admin.');
   }
@@ -422,167 +410,182 @@ bot.command('admin', async (ctx) => {
 });
 
 
-// --- BAGIAN FUNGSI sendMainMenu (GANTI SELURUHNYA) ---
+// =======================
+// Fungsi sendMainMenu
+// =======================
 async function sendMainMenu(ctx) {
   const userId = ctx.from.id;
   const chatId = ctx.chat.id;
 
-  if (lastMenus[userId]) {
-    try {
-      await ctx.telegram.deleteMessage(chatId, lastMenus[userId]);
-      logger.info(`🧹 Menu lama milik ${userId} dihapus oleh sendMainMenu`);
-      delete lastMenus[userId]; 
-    } catch (e) {
-
-      console.warn(`⚠️ Gagal hapus menu lama user ${userId} di sendMainMenu:`, e.message);
-    }
-  }
-  
-  const userName = ctx.from.username ? `@${ctx.from.username}` : (ctx.from.first_name || 'Member');
-  let saldo = 0;
-  let userRole = 'member';
   try {
-    const row = await new Promise((resolve, reject) => {
-      db.get('SELECT saldo, role FROM users WHERE user_id = ?', [userId], (err, row) => { // Mengambil saldo dan role
-        if (err) reject(err); else resolve(row);
-      });
-    });
-    saldo = row ? row.saldo : 0;
-    userRole = row ? row.role : 'member'; 
-  } catch (e) {
-    saldo = 0;
-    userRole = 'member';
-  }
-
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-  let userToday = 0, userWeek = 0, userMonth = 0;
-  let globalToday = 0, globalWeek = 0, globalMonth = 0;
-
-  try {
-    // Statistik Anda
-    userToday = await new Promise((resolve) => {
-      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', [userId, todayStart], (err, row) => resolve(row ? row.count : 0));
-    });
-    userWeek = await new Promise((resolve) => {
-      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', [userId, weekStart], (err, row) => resolve(row ? row.count : 0));
-    });
-    userMonth = await new Promise((resolve) => {
-      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', [userId, monthStart], (err, row) => resolve(row ? row.count : 0));
-    });
-
-    // Statistik Global
-    globalToday = await new Promise((resolve) => {
-      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', [todayStart], (err, row) => resolve(row ? row.count : 0));
-    });
-    globalWeek = await new Promise((resolve) => {
-      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', [weekStart], (err, row) => resolve(row ? row.count : 0));
-    });
-    globalMonth = await new Promise((resolve) => {
-      db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', [monthStart], (err, row) => resolve(row ? row.count : 0));
-    });
-  } catch (e) {
-    logger.error('Error fetching statistics:', e.message);
-  }
-
-  // Jumlah pengguna bot
-  let jumlahPengguna = 0;
-  try {
-    const row = await new Promise((resolve, reject) => {
-      db.get('SELECT COUNT(*) AS count FROM users', (err, row) => { if (err) reject(err); else resolve(row); });
-    });
-    jumlahPengguna = row.count;
-  } catch (e) { jumlahPengguna = 0; }
-
-  // Latency (dummy, bisa diubah sesuai kebutuhan)
-  const latency = (Math.random() * 0.1 + 0.01).toFixed(2);
-
-  // Ambil status tombol trial dari database
-  const tombolTrialAktif = await new Promise((resolve) => {
-    db.get('SELECT show_trial_button FROM ui_config WHERE id = 1', (err, row) => {
-      if (err) return resolve(false);
-      resolve(row?.show_trial_button === 1);
-    });
-  });
-  
-  const tombolSewaScriptAktif = await new Promise((resolve) => {
-    db.get('SELECT show_sewa_script_button FROM ui_config WHERE id = 1', (err, row) => {
-      if (err) {
-        return resolve(false);
+    // Hapus menu lama jika ada
+    if (lastMenus[userId]) {
+      try {
+        await ctx.telegram.deleteMessage(chatId, lastMenus[userId]);
+        logger.info(`🧹 Menu lama user ${userId} dihapus`);
+      } catch (e) {
+        if (!e.message.includes('message to delete not found')) {
+          console.warn(`⚠️ Gagal hapus menu lama user ${userId}:`, e.message);
+        }
       }
-      resolve(row?.show_sewa_script_button === 1);
-    });
-  });
-
-  const isUnlimited = await new Promise((resolve) => {
-    db.get('SELECT * FROM unlimited_trial_users WHERE user_id = ?', [userId], (err, row) => {
-      if (err) return resolve(false);
-      resolve(row != null);
-    });
-  });
-
-  const isAdmin = adminIds.includes(userId);
-  const bolehLihatTrial = tombolTrialAktif || isUnlimited || isAdmin;
-  
-  // --- Letakkan blok kode yang Anda tambahkan di sini ---
-  let adminUsername = 'Admin'; // Nilai default jika gagal mengambil username
-  try {
-  // Gunakan ID admin untuk mendapatkan profil chat
-  const adminChat = await bot.telegram.getChat(ADMIN);
-  // Periksa apakah username ada, lalu simpan nilainya
-    if (adminChat.username) {
-      adminUsername = adminChat.username;
+      delete lastMenus[userId];
     }
-  } catch (e) {
-  // Catat error jika gagal
-    logger.error('❌ Gagal mengambil username admin:', e.message);
-  }
-// --- Akhir blok kode yang ditambahkan ---
 
-  // Uptime bot
-  const uptime = os.uptime();
-  const days = Math.floor(uptime / 86400);
-  const hours = Math.floor((uptime % 86400) / 3600);
-  const minutes = Math.floor((uptime % 3600) / 60);
-  const seconds = Math.floor(uptime % 60);
-  const uptimeFormatted = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    // Bersihkan state user
+    delete userState[chatId];
+    if (global.depositState && global.depositState[userId]) {
+      delete global.depositState[userId];
+    }
 
-  // Tanggal dan waktu saat ini
-  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-  const currentDay = dayNames[now.getDay()];
-  const currentDate = new Intl.DateTimeFormat('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  }).format(now);
-  const timeNow = now.toTimeString().split(' ')[0];
+    // Ambil data user dari database
+    const userName = ctx.from.username ? `@${ctx.from.username}` : (ctx.from.first_name || 'Member');
+    let saldo = 0;
+    let userRole = 'member';
 
-  let jumlahServer = 0;
-  try {
-    jumlahServer = await new Promise((resolve, reject) => {
-      db.get('SELECT COUNT(*) AS count FROM Server', (err, row) => {
-        if (err) reject(err); else resolve(row.count);
+    try {
+      const row = await new Promise((resolve, reject) => {
+        db.get('SELECT saldo, role FROM users WHERE user_id = ?', [userId], (err, row) => {
+          if (err) reject(err); 
+          else resolve(row);
+        });
       });
-    });
-  } catch (e) {
-    logger.error('Gagal ambil data jumlah server:', e.message);
-  }
+      saldo = row ? row.saldo : 0;
+      userRole = row ? row.role : 'member'; 
+    } catch (e) {
+      logger.error('Error fetching user data:', e.message);
+      saldo = 0;
+      userRole = 'member';
+    }
 
-  // Menentukan teks status berdasarkan role
-  let statusText = '';
-  if (adminIds.includes(userId)) { // Cek jika user adalah admin
-    statusText = `👑 <b>» Status:</b> <code>Admin</code>`;
-  } else if (userRole === 'reseller') {
-    statusText = `🏆 <b>» Status:</b> <code>Reseller</code>`;
-  } else {
-    statusText = `👤 <b>» Status:</b> <code>Member</code>`; // Mengubah emoji untuk Member
-  }
+    // Ambil statistik
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  // Pesan utama dengan format yang sudah padat dan rapi
-  const messageText = `
+    let userToday = 0, userWeek = 0, userMonth = 0;
+    let globalToday = 0, globalWeek = 0, globalMonth = 0;
+
+    try {
+      // Statistik User
+      [userToday, userWeek, userMonth] = await Promise.all([
+        new Promise((resolve) => {
+          db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', 
+            [userId, todayStart], (err, row) => resolve(row ? row.count : 0));
+        }),
+        new Promise((resolve) => {
+          db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', 
+            [userId, weekStart], (err, row) => resolve(row ? row.count : 0));
+        }),
+        new Promise((resolve) => {
+          db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE user_id = ? AND waktu_transaksi >= ? AND action_type IN ("create","renew")', 
+            [userId, monthStart], (err, row) => resolve(row ? row.count : 0));
+        })
+      ]);
+
+      // Statistik Global
+      [globalToday, globalWeek, globalMonth] = await Promise.all([
+        new Promise((resolve) => {
+          db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', 
+            [todayStart], (err, row) => resolve(row ? row.count : 0));
+        }),
+        new Promise((resolve) => {
+          db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', 
+            [weekStart], (err, row) => resolve(row ? row.count : 0));
+        }),
+        new Promise((resolve) => {
+          db.get('SELECT COUNT(*) as count FROM log_penjualan WHERE waktu_transaksi >= ? AND action_type IN ("create","renew")', 
+            [monthStart], (err, row) => resolve(row ? row.count : 0));
+        })
+      ]);
+    } catch (e) {
+      logger.error('Error fetching statistics:', e.message);
+    }
+
+    // Jumlah pengguna bot
+    let jumlahPengguna = 0;
+    let jumlahServer = 0;
+    try {
+      const [userCount, serverCount] = await Promise.all([
+        new Promise((resolve) => {
+          db.get('SELECT COUNT(*) AS count FROM users', (err, row) => {
+            if (err) resolve(0); else resolve(row.count);
+          });
+        }),
+        new Promise((resolve) => {
+          db.get('SELECT COUNT(*) AS count FROM Server', (err, row) => {
+            if (err) resolve(0); else resolve(row.count);
+          });
+        })
+      ]);
+      jumlahPengguna = userCount;
+      jumlahServer = serverCount;
+    } catch (e) {
+      logger.error('Gagal ambil data jumlah user/server:', e.message);
+    }
+
+    // Ambil konfigurasi UI
+    const [tombolTrialAktif, tombolSewaScriptAktif, isUnlimited] = await Promise.all([
+      new Promise((resolve) => {
+        db.get('SELECT show_trial_button FROM ui_config WHERE id = 1', (err, row) => {
+          if (err) resolve(false);
+          else resolve(row?.show_trial_button === 1);
+        });
+      }),
+      new Promise((resolve) => {
+        db.get('SELECT show_sewa_script_button FROM ui_config WHERE id = 1', (err, row) => {
+          if (err) resolve(false);
+          else resolve(row?.show_sewa_script_button === 1);
+        });
+      }),
+      new Promise((resolve) => {
+        db.get('SELECT * FROM unlimited_trial_users WHERE user_id = ?', [userId], (err, row) => {
+          if (err) resolve(false);
+          else resolve(row != null);
+        });
+      })
+    ]);
+
+    const isAdmin = adminIds.includes(userId);
+    const bolehLihatTrial = tombolTrialAktif || isUnlimited || isAdmin;
+
+    // Ambil username admin
+    let adminUsername = 'Admin';
+    try {
+      const adminChat = await bot.telegram.getChat(ADMIN);
+      if (adminChat.username) {
+        adminUsername = adminChat.username;
+      }
+    } catch (e) {
+      adminUsername = 'Admin';
+      logger.warn('⚠️ Gagal mengambil username admin:', e.message);
+    }
+
+    // Format waktu dan tanggal
+    const uptime = os.uptime();
+    const days = Math.floor(uptime / 86400);
+    const hours = Math.floor((uptime % 86400) / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = Math.floor(uptime % 60);
+    const uptimeFormatted = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const currentDay = dayNames[now.getDay()];
+    const currentDate = new Intl.DateTimeFormat('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }).format(now);
+    const timeNow = now.toTimeString().split(' ')[0];
+
+    // Tentukan status user
+    let statusText = '';
+    if (isAdmin) statusText = `👑 <b>ꜱᴛᴀᴛᴜꜱ:</b> <code>Admin</code>`;
+    else if (userRole === 'reseller') statusText = `🏆 <b>ꜱᴛᴀᴛᴜꜱ:</b> <code>Reseller</code>`;
+    else statusText = `👤 <b>ꜱᴛᴀᴛᴜꜱ:</b> <code>Member</code>`;
+
+    // Buat pesan utama
+    const messageText = `
 📦━━━━━━━━━━━━━━━━━━━━━📦
       <b>✨ 🄰🄽🅂🄴🄽🄳🄰🄽🅃 🅅🄿🄽 ✨</b>
 📦━━━━━━━━━━━━━━━━━━━━━📦
@@ -635,62 +638,85 @@ async function sendMainMenu(ctx) {
 📦━━━━━━━━━━━━━━━━━━━━━📦
 `;
 
-  const keyboard = [];
 
-  if (bolehLihatTrial) {
-    keyboard.push([{ text: '💠 Trial Akun', callback_data: 'service_trial' }]);
-  }
+    // Buat keyboard
+    const keyboard = [];
+    if (bolehLihatTrial) keyboard.push([{ text: '💠 Trial Akun', callback_data: 'service_trial' }]);
+    keyboard.push([{ text: '✏️ Buat Akun', callback_data: 'service_create' }, { text: '♻️ Renew Akun', callback_data: 'service_renew' }]);
+    if (tombolSewaScriptAktif) keyboard.push([{ text: '🛒 Sewa Script', callback_data: 'service_sewascript' }]);
+    keyboard.push([{ text: '💰 TopUp Saldo', callback_data: 'menu_topup' }]);
 
-  keyboard.push([{ text: '✏️ Buat Akun', callback_data: 'service_create' }, { text: '♻️ Renew Akun', callback_data: 'service_renew' }]);
-  
-  if (tombolSewaScriptAktif) {
-    keyboard.push([{ text: '🛒 Sewa Script', callback_data: 'service_sewascript' }]);
-  }
-  
-  keyboard.push([{ text: '💰 TopUp Saldo', callback_data: 'menu_topup' }]);
-
-
-  try {
-    if (ctx.updateType === 'callback_query' && ctx.callbackQuery.message) {
+    // Kirim atau edit message
+    let sentMessage = null;
+    if (ctx.updateType === 'callback_query' && ctx.callbackQuery?.message) {
       try {
-        await ctx.editMessageText(messageText, {
-          parse_mode: 'HTML', // Menggunakan HTML untuk formatting yang lebih baik
-          disable_web_page_preview: true, // Untuk menghindari preview link Telegram
-          reply_markup: { inline_keyboard: keyboard }
-        });
-      } catch (error) {
-        if (error && error.response && error.response.error_code === 400 &&
-            (error.response.description.includes('message is not modified') ||
-             error.response.description.includes('message to edit not found') ||
-             error.response.description.includes('message can\'t be edited'))
-        ) {
-          logger.info('Edit message diabaikan karena pesan sudah diedit/dihapus atau tidak berubah.');
-        } else {
-          logger.error('Error saat mengedit menu utama:', error);
-          // Jika edit gagal, coba kirim sebagai pesan baru
-          await ctx.reply(messageText, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            reply_markup: { inline_keyboard: keyboard }
-          }).catch(e => logger.error('Error saat mengirim menu utama sebagai pesan baru setelah edit gagal:', e));
-        }
-      }
-    } else {
-      try {
-        await ctx.reply(messageText, {
+        const edited = await ctx.editMessageText(messageText, {
           parse_mode: 'HTML',
           disable_web_page_preview: true,
           reply_markup: { inline_keyboard: keyboard }
         });
+        sentMessage = edited;
+        logger.info(`✅ Menu utama diedit untuk user ${userId}`);
       } catch (error) {
-        logger.error('Error saat mengirim menu utama:', error);
+        if (
+          error.response?.error_code === 400 &&
+          (error.response.description.includes('message is not modified') ||
+           error.response.description.includes('message to edit not found') ||
+           error.response.description.includes("message can't be edited"))
+        ) {
+          logger.info(`ℹ️ Edit message diabaikan untuk user ${userId}, kirim ulang menu baru`);
+          sentMessage = await sendNewMenu(ctx, messageText, keyboard, userId);
+        } else {
+          logger.error(`❌ Error edit menu untuk user ${userId}:`, error.message);
+          sentMessage = await sendNewMenu(ctx, messageText, keyboard, userId);
+        }
       }
+    } else {
+      sentMessage = await sendNewMenu(ctx, messageText, keyboard, userId);
     }
-    logger.info('Main menu sent');
+
+    // Pastikan selalu return message_id
+    if (sentMessage?.message_id) {
+      lastMenus[userId] = sentMessage.message_id;
+      return sentMessage;
+    } else {
+      logger.warn(`⚠️ sendMainMenu tidak mengembalikan message_id untuk user ${userId}, kirim ulang menu`);
+      const resent = await sendNewMenu(ctx, messageText, keyboard, userId);
+      if (resent?.message_id) lastMenus[userId] = resent.message_id;
+      return resent;
+    }
+
   } catch (error) {
-    logger.error('Error umum saat mengirim menu utama:', error);
+    logger.error(`❌ Error fatal di sendMainMenu untuk user ${userId}:`, error.message);
+    try {
+      const fallback = await ctx.reply('⚠️ Gagal menampilkan menu utama, coba /menu.');
+      return fallback;
+    } catch (e) {
+      logger.error(`❌ Gagal kirim fallback untuk user ${userId}:`, e.message);
+      return null;
+    }
   }
 }
+
+// =======================
+// Helper kirim menu baru
+// =======================
+async function sendNewMenu(ctx, text, keyboard, userId) {
+  try {
+    const sentMessage = await ctx.reply(text, {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: keyboard }
+    });
+    lastMenus[userId] = sentMessage.message_id; // simpan message_id
+    logger.info(`✅ Menu utama baru dikirim untuk user ${userId}`);
+    return sentMessage; // penting agar sendMainMenu punya message_id
+  } catch (e) {
+    logger.error(`❌ Gagal kirim menu baru untuk user ${userId}:`, e.message);
+    return null;
+  }
+}
+
 
 
 bot.command('hapuslog', async (ctx) => {
@@ -842,28 +868,57 @@ bot.command('broadcast', async (ctx) => {
 function formatRupiah(angka) {
   return `Rp${(angka || 0).toLocaleString('id-ID')}`;
 }
-// --- Handle Cancel Deposit ---
+// === Handler tombol kembali ke menu utama ===
+// === Handler tombol kembali ke menu utama (fix delete + reply) ===
+
 bot.action(/^batal_topup_(.+)$/, async (ctx) => {
-  const transactionId = ctx.match[1];
-  const deposit = global.pendingDeposits[transactionId];
+  const uniqueCode = ctx.match[1];
+  const deposit = global.pendingDeposits[uniqueCode];
 
   if (!deposit) {
     return ctx.answerCbQuery('Transaksi sudah tidak aktif atau telah dibatalkan.', { show_alert: true });
   }
 
   try {
+    // Hapus pesan QR
     if (deposit.qrMessageId) {
-      await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId).catch(() => {});
+      try {
+        await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId);
+      } catch (e) {}
     }
 
-    delete global.pendingDeposits[transactionId];
-    await deletePendingDeposit(transactionId);
+    // Hapus dari pending
+    delete global.pendingDeposits[uniqueCode];
+    await deletePendingDeposit(uniqueCode);
 
     await ctx.answerCbQuery('Topup dibatalkan.');
-    await ctx.reply('❌ Topup QRIS dibatalkan. Silahkan topup ulang jika ingin mencoba lagi.', {
+
+    // ===== Kirim pesan dengan tombol kembali =====
+    await ctx.reply('❌ Topup QRIS Orkut telah dibatalkan. Silahkan topup ulang jika ingin mencoba lagi.', {
       parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali ke Menu Top-up', callback_data: 'menu_topup' }]] }
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🔙 Kembali ke Menu Top-up', callback_data: 'menu_topup' }]
+        ]
+      }
     });
+    // =============================================
+
+    // Tambahan: hapus pesan command user (jika diperlukan)
+    try {
+      const chatId = ctx.chat.id;
+      const userId = ctx.from.id;
+      // Pastikan ctx.message ada (atau gunakan ctx.update.callback_query.message jika akses via callback)
+      const messageId = ctx.update.callback_query.message?.message_id;
+      if (messageId) {
+        await ctx.telegram.deleteMessage(chatId, messageId);
+        logger.info(`🧹 Pesan command user ${userId} berhasil dihapus`);
+      }
+    } catch (e) {
+      const userId = ctx.from.id;
+      console.warn(`⚠️ Tidak bisa hapus pesan command user ${userId}:`, e.message);
+    }
+
   } catch (e) {
     logger.error('Gagal batal topup:', e);
     await ctx.answerCbQuery('Gagal batal topup.', { show_alert: true });
@@ -1051,6 +1106,10 @@ bot.action('menu_topup', async (ctx) => {
   }
 });
 
+
+
+
+
 async function processDepositSaweria(ctx, amount) {
   try {
     const SAWERIA_USERNAME = process.env.SAWERIA_USERNAME || vars.SAWERIA_USERNAME;
@@ -1061,7 +1120,7 @@ async function processDepositSaweria(ctx, amount) {
     }
 
     const amountInt = parseInt(amount);
-    const apiUrl = `https://my-payment.autsc.my.id/api/create?username=${encodeURIComponent(SAWERIA_USERNAME)}&amount=${amountInt}&email=${encodeURIComponent(SAWERIA_EMAIL)}`;
+    const apiUrl = `https://saweria.autsc.my.id/api/create?username=${encodeURIComponent(SAWERIA_USERNAME)}&amount=${amountInt}&email=${encodeURIComponent(SAWERIA_EMAIL)}`;
 
     const res = await axios.get(apiUrl);
     const result = res.data;
@@ -1156,7 +1215,7 @@ setInterval(async () => {
 
       // ✅ Cek status pembayaran
       try {
-        const res = await axios.get(`https://my-payment.autsc.my.id/check-payment?idtransaksi=${idtrx}`);
+        const res = await axios.get(`https://saweria.autsc.my.id/check-payment?idtransaksi=${idtrx}`);
         const data = res.data;
 
         logger.info(`Respons Saweria check-payment untuk ${idtrx}: ${JSON.stringify(data)}`);
@@ -1648,10 +1707,29 @@ const showSewaScript = await new Promise((resolve) => {
     ];
 
     const messageText = `
-━━━━━━━━━━━━━━━━━━━━━━
-      🏷️ *≡ MENU ADMIN VPN ≡* 🏷️
-━━━━━━━━━━━━━━━━━━━━━━
-💸 *» Pilih Menu Admin Dibawah Ini:*`;
+╔════════════════════════╗
+║           🏷️ *≡ MENU ADMIN VPN ≡* 🏷️                        ║
+╚════════════════════════╝
+💸 *» PILIH MENU ADMIN DIBAWAH INI:*  
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+✏️ TAMBAH SERVER        ❌ HAPUS SERVER
+💲 EDIT HARGA               📝 EDIT NAMA
+🌐 EDIT DOMAIN             🔑 EDIT AUTH
+📊 EDIT QUOTA               📶 EDIT LIMIT IP
+🔢 BATAS CREATE           🔢 TOTAL CREATE
+💵 TAMBAH SALDO         📋 LIST SERVER
+♻️ RESET SERVER           ℹ️ DETAIL SERVER
+🎁 BONUS TOPUP           📜 LOG BONUS TOPUP
+${config.topup_saldo ? '✅' : '❌'} TOPUP ORKUT           ${config.topup_saweria ? '✅' : '❌'} TOPUP SAWERIA
+${showTrial ? '✅' : '❌'} TOMBOL TRIAL          ${showSewaScript ? '✅' : '❌'} TOMBOL SEWA SCRIPT
+📈 HASIL PENJUALAN     📑 LOG TOPUP
+👥 LIST RESELLER        
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔙 KEMBALI
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+
 
     // Hapus pesan admin sebelumnya (opsional, jika ingin clean)
     if (typeof lastMenus !== 'undefined' && lastMenus[userId]) {
@@ -1839,6 +1917,9 @@ bot.action('service_renew', async (ctx) => {
   await handleServiceAction(ctx, 'renew');
 });
 
+// ==============================================
+// 🔙 Handler tombol "Kembali ke Menu Utama"
+// ==============================================
 bot.action('send_main_menu', async (ctx) => {
   const userId = ctx.from.id;
   const chatId = ctx.chat.id;
@@ -1846,24 +1927,37 @@ bot.action('send_main_menu', async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
+    // Hapus menu lama kalau ada (biar bersih)
     if (lastMenus[userId]) {
       try {
         await ctx.telegram.deleteMessage(chatId, lastMenus[userId]);
+        logger.info(`🧹 Menu lama user ${userId} dihapus (kembali ke menu utama)`);
       } catch (e) {
-        console.warn(`⚠️ Gagal hapus menu lama dari ${userId}:`, e.message);
+        // Abaikan error jika pesan sudah hilang
+        if (!e.message.includes('message to delete not found')) {
+          console.warn(`⚠️ Gagal hapus menu lama user ${userId}:`, e.message);
+        }
       }
     }
 
+    // Panggil fungsi menu utama
     const sent = await sendMainMenu(ctx);
+
+    // Simpan ID pesan terakhir biar bisa dihapus di klik berikutnya
     if (sent?.message_id) {
       lastMenus[userId] = sent.message_id;
+      logger.info(`✅ Menu utama baru dikirim ke user ${userId}`);
+    } else {
+      logger.warn(`⚠️ sendMainMenu tidak mengembalikan message_id untuk user ${userId}`);
+      await ctx.reply('⚠️ Gagal menampilkan menu utama, coba /menu.');
     }
 
   } catch (error) {
-    logger.error('❌ Gagal handle send_main_menu:', error.message);
-    await ctx.reply('❌ *Gagal memproses menu utama.*', { parse_mode: 'Markdown' });
+    logger.error(`❌ Gagal handle tombol send_main_menu untuk user ${userId}:`, error.message);
+    await ctx.reply('❌ Terjadi kesalahan saat memuat menu utama.\nSilakan ketik /menu untuk kembali.');
   }
 });
+
 
 bot.action('create_vmess', async (ctx) => {
   if (!ctx || !ctx.match) {
@@ -4099,7 +4193,23 @@ bot.action('topup_saldo', async (ctx) => {
 
     // Kirim instruksi ke user untuk mengetik nominal
     const sent = await ctx.reply(
-      '💳 *Silahkan ketik nominal top-up yang ingin Anda bayarkan melalui QRIS Orkut.*\n\nMinimal topup Rp 100\nContoh: `10000`',
+  `
+💳━━━━━━━━━━━━━━━━━━━━💳
+        *Qʀɪꜱ Oʀᴋᴜᴛ ᴛᴏᴘ-ᴜᴘ*
+💳━━━━━━━━━━━━━━━━━━━━💳
+
+⚡ *ꜱɪʟᴀʜᴋᴀɴ ᴋᴇᴛɪᴋ ɴᴏᴍɪɴᴀʟ ᴛᴏᴘ-ᴜᴘ*  
+ʏᴀɴɢ ɪɴɢɪɴ ᴀɴᴅᴀ ʙᴀʏᴀʀᴋᴀɴ ᴍᴇʟᴀʟᴜɪ ᴍᴇᴛᴏᴅᴇ Qʀɪꜱ Oʀᴋᴜᴛ.  
+
+💰 ᴍɪɴɪᴍᴀʟ ᴛᴏᴘ-ᴜᴘ: *Rp 100*  
+🧾 ᴄᴏɴᴛᴏʜ: \`10000\`
+
+━━━━━━━━━━━━━━━━━━━━━━━
+⌛ ᴋᴇᴍᴜᴅɪᴀɴ ᴛᴜɴɢɢᴜ ᴘʀᴏꜱᴇꜱ ᴏᴛᴏᴍᴀᴛɪꜱ.  
+ᴀᴘᴀʙɪʟᴀ ꜱᴀʟᴅᴏ ʙᴇʟᴜᴍ ᴍᴀꜱᴜᴋ,  
+ʜᴜʙᴜɴɢɪ ᴀᴅᴍɪɴ ᴅᴇɴɢᴀɴ ʙᴜᴋᴛɪ ᴛʀᴀɴꜱᴀᴋꜱɪ.  
+━━━━━━━━━━━━━━━━━━━━━━━
+`,
       { parse_mode: 'Markdown' }
     );
 
@@ -4235,7 +4345,7 @@ bot.action('log_bonus_topup', async (ctx) => {
       return ctx.reply('⚠️ Belum ada data bonus');
     }
 
-    const isi = rows.map((row, i) => {
+    let isi = rows.map((row, i) => {
       const username = row.username ? `\`${row.username}\`` : `\`${row.user_id}\``;
       const formattedTimestamp = new Date(row.timestamp).toLocaleString('id-ID', {
         year: 'numeric',
@@ -4247,10 +4357,13 @@ bot.action('log_bonus_topup', async (ctx) => {
         hour12: false
       });
 
-      return `*${i + 1}.* 👤 ${username}\n🆔 ID: \`${row.user_id}\`\n💸 TopUp: Rp${row.amount}\n🎁 Bonus: Rp${row.bonus}\n🕒 ${formattedTimestamp}`;
+      return `━━━━━━━━━━━━━━\n🔹 *${i + 1}*\n👤 User: ${username}\n🆔 ID: \`${row.user_id}\`\n💰 TopUp: *Rp${row.amount}*\n🎁 Bonus: *Rp${row.bonus}*\n⏰ ${formattedTimestamp}`;
     }).join('\n\n');
 
-    ctx.reply(`📋 *Riwayat Bonus Top Up (10 Terbaru)*\n\n${isi}`, {
+    // Tambahin garis terakhir di paling bawah
+    isi += `\n━━━━━━━━━━━━━━`;
+
+    ctx.reply(`✨ *Riwayat Bonus Top Up*\n_10 Data Terbaru_\n\n${isi}`, {
       parse_mode: 'Markdown'
     });
   });
@@ -4264,9 +4377,8 @@ bot.action('log_topup', async (ctx) => {
       return ctx.reply('⚠️ Belum ada data topup');
     }
 
-    const isi = rows.map((row, i) => {
+    let isi = rows.map((row, i) => {
       const username = row.username ? `\`${row.username}\`` : `\`${row.user_id}\``;
-      // Gunakan kolom 'waktu'
       const formattedTimestamp = new Date(row.waktu).toLocaleString('id-ID', {
         year: 'numeric',
         month: '2-digit',
@@ -4277,14 +4389,18 @@ bot.action('log_topup', async (ctx) => {
         hour12: false
       });
 
-      return `*${i + 1}.* 👤 @${username}\n🆔 ID: \`${row.user_id}\`\n💸 TopUp: Rp${row.amount}\n🕒 ${formattedTimestamp}`;
+      return `━━━━━━━━━━━━━━\n🔹 *${i + 1}*\n👤 User: ${username}\n🆔 ID: \`${row.user_id}\`\n💰 TopUp: *Rp${row.amount}*\n⏰ ${formattedTimestamp}`;
     }).join('\n\n');
 
-    ctx.reply(`📋 *Riwayat Top Up (10 Terbaru)*\n\n${isi}`, {
+    // Tambahin garis terakhir di paling bawah
+    isi += `\n━━━━━━━━━━━━━━`;
+
+    ctx.reply(`💳 *Riwayat Top Up*\n_10 Data Terbaru_\n\n${isi}`, {
       parse_mode: 'Markdown'
     });
   });
 });
+
 
 function prosesBonusTopUp(user_id, username, original_amount) {
   return new Promise((resolve, reject) => {
@@ -4498,75 +4614,97 @@ bot.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data;
   const userStateData = userState[ctx.chat.id];
 
-  // Pastikan ini ditangani hanya sekali per callback
   await ctx.answerCbQuery();
 
-  // Check if the callback data is for paginated saldo list
+  console.log("Callback diterima:", data);
+
+
+  // ===============================
+  // 📋 LIST SALDO
+  // ===============================
   if (data.startsWith('listsaldo_')) {
     const page = parseInt(data.split('_')[1], 10);
     await sendPaginatedUserSaldo(ctx, page, true);
+    return;
   }
-  // Menambahkan handler untuk listreseller_ callback
-  else if (data.startsWith('listreseller_')) {
-      const parts = data.split('_');
-      const direction = parts[1];
-      let page = parseInt(parts[2]);
-      page = direction === 'next' ? page + 1 : page - 1;
-      if (page < 1) page = 1;
-      await sendPaginatedResellerList(ctx, page, ctx.callbackQuery.message.message_id);
-  }
-  // Menambahkan handler untuk unlimitedtrial_ callback
-  else if (data.startsWith('listunlimitedtrial_')) {
-      const parts = data.split('_');
-      const direction = parts[1];
-      let page = parseInt(parts[2]);
-      page = direction === 'next' ? page + 1 : page - 1;
-      if (page < 1) page = 1;
-      await showUnlimitedTrialPage(ctx, page, ctx.callbackQuery.message.message_id);
-  }
-  // Existing userState handling logic
-  else if (userStateData) { 
-      const isNumericInput = !isNaN(parseInt(data, 10)) || data === 'delete' || data === 'confirm';
-      const isAlphaNumericInput = /^[a-zA-Z0-9.-]+$/.test(data) || data === 'delete' || data === 'confirm';
 
-      if (global.depositState[ctx.from.id] && global.depositState[ctx.from.id].action === 'request_amount' && isNumericInput) {
-          await handleDepositState(ctx, ctx.from.id, data);
-      } else {
-          switch (userStateData.step) {
-              case 'add_saldo':
-                  if (isNumericInput) await handleAddSaldo(ctx, userStateData, data);
-                  break;
-              case 'edit_batas_create_akun':
-                  if (isNumericInput) await handleEditBatasCreateAkun(ctx, userStateData, data);
-                  break;
-              case 'edit_limit_ip':
-                  if (isNumericInput) await handleEditiplimit(ctx, userStateData, data);
-                  break;
-              case 'edit_quota':
-                  if (isNumericInput) await handleEditQuota(ctx, userStateData, data);
-                  break;
-              case 'edit_auth':
-                  if (isAlphaNumericInput) await handleEditAuth(ctx, userStateData, data);
-                  break;
-              case 'edit_domain':
-                  if (isAlphaNumericInput) await handleEditDomain(ctx, userStateData, data);
-                  break;
-              case 'edit_harga':
-                  if (isNumericInput) await handleEditHarga(ctx, userStateData, data);
-                  break;
-              case 'edit_nama':
-                  if (isAlphaNumericInput) await handleEditNama(ctx, userStateData, data);
-                  break;
-              case 'edit_total_create_akun':
-                  if (isNumericInput) await handleEditTotalCreateAkun(ctx, userStateData, data);
-                  break;
-              default:
-                  logger.warn(`Unhandled callback_query: ${data} for userState.step: ${userStateData.step}`);
-                  break;
-          }
+  // ===============================
+  // 💼 LIST RESELLER
+  // ===============================
+  if (data.startsWith('listreseller_')) {
+    const parts = data.split('_');
+    const direction = parts[1];
+    let page = parseInt(parts[2]);
+    page = direction === 'next' ? page + 1 : page - 1;
+    if (page < 1) page = 1;
+    await sendPaginatedResellerList(ctx, page, ctx.callbackQuery.message.message_id);
+    return;
+  }
+
+  // ===============================
+  // 🧪 LIST UNLIMITED TRIAL
+  // ===============================
+  if (data.startsWith('listunlimitedtrial_')) {
+    const parts = data.split('_');
+    const direction = parts[1];
+    let page = parseInt(parts[2]);
+    page = direction === 'next' ? page + 1 : page - 1;
+    if (page < 1) page = 1;
+    await showUnlimitedTrialPage(ctx, page, ctx.callbackQuery.message.message_id);
+    return;
+  }
+
+  // ===============================
+  // ⚙️ HANDLER STATE USER
+  // ===============================
+  if (userStateData) {
+    const isNumericInput = !isNaN(parseInt(data, 10)) || data === 'delete' || data === 'confirm';
+    const isAlphaNumericInput = /^[a-zA-Z0-9.-]+$/.test(data) || data === 'delete' || data === 'confirm';
+
+    if (
+      global.depositState?.[userId] &&
+      global.depositState[userId].action === 'request_amount' &&
+      isNumericInput
+    ) {
+      await handleDepositState(ctx, userId, data);
+    } else {
+      switch (userStateData.step) {
+        case 'add_saldo':
+          if (isNumericInput) await handleAddSaldo(ctx, userStateData, data);
+          break;
+        case 'edit_batas_create_akun':
+          if (isNumericInput) await handleEditBatasCreateAkun(ctx, userStateData, data);
+          break;
+        case 'edit_limit_ip':
+          if (isNumericInput) await handleEditiplimit(ctx, userStateData, data);
+          break;
+        case 'edit_quota':
+          if (isNumericInput) await handleEditQuota(ctx, userStateData, data);
+          break;
+        case 'edit_auth':
+          if (isAlphaNumericInput) await handleEditAuth(ctx, userStateData, data);
+          break;
+        case 'edit_domain':
+          if (isAlphaNumericInput) await handleEditDomain(ctx, userStateData, data);
+          break;
+        case 'edit_harga':
+          if (isNumericInput) await handleEditHarga(ctx, userStateData, data);
+          break;
+        case 'edit_nama':
+          if (isAlphaNumericInput) await handleEditNama(ctx, userStateData, data);
+          break;
+        case 'edit_total_create_akun':
+          if (isNumericInput) await handleEditTotalCreateAkun(ctx, userStateData, data);
+          break;
+        default:
+          logger.warn(`Unhandled callback_query: ${data} for userState.step: ${userStateData.step}`);
+          break;
       }
+    }
   }
 });
+
+
 
 async function handleDepositState(ctx, userId, data) {
   let state = global.depositState[userId];
@@ -4838,143 +4976,353 @@ db.all('SELECT * FROM pending_deposits WHERE status = "pending"', [], (err, rows
 
 const config = {
     storeName: NAMA_STORE,
-//    auth_username: MERCHANT_ID,
+    auth_username: MERCHANT_ID,
     auth_token: API_KEY,
-//    baseQrString: DATA_QRIS,
-//    logoPath: 'logo.png'
+    baseQrString: DATA_QRIS,
+    logoPath: 'logo.png'
 };
 
-//const qris = new QRISPayment(config);
+const qris = new QRISGenerator(config, 'theme1');
 
 async function processDeposit(ctx, amount) {
-  try {
-    const waitMsg = await ctx.reply("⏳ Mohon menunggu...");
+  const currentTime = Date.now();
+  const userId = ctx.from.id;
 
-    // 🔥 Panggil API Orkut
-    const response = await axios.get(
-      `https://my-payment.autsc.my.id/api/deposit?amount=${amount}&apikey=${API_KEY}`
+  // Anti-spam request
+  if (global.depositState?.[userId]) {
+    return ctx.reply("⚠️ Kamu masih punya transaksi deposit yang belum selesai!");
+  }
+
+  if (currentTime - lastRequestTime < requestInterval) {
+    return ctx.reply(
+      '⚠️ *Terlalu banyak permintaan. Silahkan tunggu sebentar sebelum mencoba lagi.*',
+      { parse_mode: 'Markdown' }
     );
-    const result = response.data;
+  }
+  lastRequestTime = currentTime;
 
-    if (result.status !== "success") {
-      logger.error("API Gagal buat QRIS:", result);
-      throw new Error("Gagal membuat QRIS: " + JSON.stringify(result));
+  // Ambil dari vars.json: merchantid & api_key
+  // (fallback ENV & fleksibel kapitalisasi key)
+  const MERCHANT_ID = (typeof vars !== 'undefined' && (vars.merchantid || vars.MERCHANTID)) || process.env.MERCHANT_ID || process.env.merchantid || '';
+  const API_KEY = (typeof vars !== 'undefined' && (vars.api_key || vars.API_KEY)) || process.env.API_KEY || process.env.api_key || '';
+
+  if (!MERCHANT_ID || !API_KEY) {
+    return ctx.reply('❌ *Konfigurasi Orkut belum lengkap.* Harap isi `merchantid` dan `api_key` di vars.json / ENV.', { parse_mode: 'Markdown' });
+  }
+
+  const finalAmount = (typeof generateRandomAmount === 'function')
+    ? generateRandomAmount(parseInt(amount))
+    : parseInt(amount);
+
+  const localUnique = `user-${userId}-${currentTime}`;
+
+  global.pendingDeposits ??= {};
+  global.depositState ??= {};
+  global.depositState[userId] = true;
+
+  const withTimeout = (promise, ms, message = "Waktu tunggu habis") =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+    ]);
+
+  async function resetDepositState(uniqueKey) {
+    try {
+      delete global.depositState?.[userId];
+      if (uniqueKey) delete global.pendingDeposits?.[uniqueKey];
+      if (typeof deletePendingDeposit === 'function' && uniqueKey) {
+        await deletePendingDeposit(uniqueKey).catch(() => {});
+      }
+    } catch (e) {
+      if (typeof console !== 'undefined') console.error("Gagal reset deposit:", e);
+    }
+  }
+
+  let waitMsg;
+  const start = Date.now();
+
+  try {
+    // Pesan loading
+    waitMsg = await ctx.reply("⏳ Mohon menunggu...");
+    let dots = 0;
+    const loading = setInterval(async () => {
+      dots = (dots + 1) % 4;
+      try {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          waitMsg.message_id,
+          null,
+          "⏳ Mohon menunggu" + ".".repeat(dots)
+        );
+      } catch {
+        clearInterval(loading);
+      }
+    }, 700);
+
+    // === Panggil API Orkut untuk membuat QRIS ===
+    const createUrl = 'https://qris-ajaib.autsc.my.id/create';
+    // Kirim sesuai permintaan: username = merchantid, api_key = api_key
+    const reqBody = { username: MERCHANT_ID, api_key: API_KEY, amount: finalAmount };
+
+    if (typeof logger !== 'undefined') {
+      logger.info(`Orkut create: ${createUrl} body=${JSON.stringify({ username: MERCHANT_ID, amount: finalAmount, api_key: '***' })}`);
     }
 
-    const data = result.data;
-    const transactionId = data.transaction_id;
+    const createResp = await withTimeout(
+      axios.post(createUrl, reqBody, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }),
+      20000,
+      "Timeout memanggil API Orkut"
+    );
 
-    // Download QR
-    const qrResponse = await axios.get(data.qris_url, { responseType: "arraybuffer" });
-    const qrBuffer = Buffer.from(qrResponse.data);
+    const data = createResp?.data || {};
+    if (typeof logger !== 'undefined') logger.debug(`Orkut create response: ${JSON.stringify(data)}`);
 
-    const caption =
-      `🧾 *Pembayaran:*\n\n` +
-      `💵 Nominal: Rp ${data.total_amount}\n` +
-      `- Nominal Top Up: Rp ${data.amount}\n` +
-      `- Admin Fee : Rp ${data.fee}\n` +
-      `⏳ Batas: ${data.expired_at}\n\n` +
-      `✅ Otomatis terverifikasi\n` +
-      `📌 Jangan tutup halaman ini`;
+    if (!data || (!data.success && !data.data)) {
+      clearInterval(loading);
+      await ctx.reply("❌ Gagal membuat QRIS Orkut (struktur respons tidak sesuai).");
+      await resetDepositState();
+      return;
+    }
+
+    // Ambil field-field yang mungkin ada
+    const qrUrl = data.data?.qr || data.data?.qr_url || data.data?.qrImageUrl || data.data?.qrImage || data.qr || null;
+    const qrBase64 = data.data?.qr_base64 || data.data?.qrBase64 || null;
+    const apiRef = String(
+      data.data?.unique_code ||
+      data.data?.issuer_reff ||
+      data.data?.transactionId ||
+      data.data?.id ||
+      localUnique
+    );
+
+    clearInterval(loading);
+
+    // === Kirim QR ke user ===
+    const caption = [
+      `┏━━━━━━━━━━━━━━━━━━━━━┓`,
+      `          🏷️*ᴅᴇᴛᴀɪʟ ᴘᴇᴍʙᴀʏᴀʀᴀɴ*🏷️`,
+      `┗━━━━━━━━━━━━━━━━━━━━━┛`,
+      ``,
+      `💵 ɴᴏᴍɪɴᴀʟ: *Rp ${finalAmount}*`,
+      `⏳ ʙᴀᴛᴀꜱ ᴡᴀᴋᴛᴜ: *5 ᴍɪɴɪᴛ*`,
+      `⚠️ ᴛʀᴀɴꜱꜰᴇʀ *ʜᴀʀᴜꜱ ꜱᴇꜱᴜᴀɪ ɴᴏᴍɪɴᴀʟ*`,
+      ``,
+      `✅ ᴘᴇᴍʙᴀʏᴀʀᴀɴ ᴏᴛᴏᴍᴀᴛɪꜱ`,
+      `📌 ᴊᴀɴɢᴀɴ ᴛᴜᴛᴜᴘ ʜᴀʟᴀᴍᴀɴ ɪɴɪ`,
+      ``,
+      `┏━━━━━━━━━━━━━━━━━━━━━┓`,
+      `    🌐 ᴅɪᴋᴇʟᴏʟᴀ ᴏʟᴇʜ *ᴀɴꜱᴇɴᴅᴀɴᴛ ɴᴇᴛᴡᴏʀᴋ*`,
+      `┗━━━━━━━━━━━━━━━━━━━━━┛`
+    ].join('\n');
 
     const inlineKeyboard = [
-      [{ text: "📢 Join Channel", url: `https://t.me/${GROUP_USERNAME}` }],
-      [{ text: "❌ Batal Topup", callback_data: `batal_topup_${transactionId}` }]
+      [
+        { text: "📢 Join Channel", url: `https://t.me/${typeof GROUP_USERNAME !== 'undefined' ? GROUP_USERNAME : 'your_channel'}` }
+      ],
+      [
+        { text: "❌ Batal Topup", callback_data: `batal_topup_${apiRef}` }
+      ]
     ];
 
-    const qrMessage = await ctx.replyWithPhoto(
-      { source: qrBuffer },
-      {
-        caption,
-        parse_mode: "Markdown",
-        reply_markup: { inline_keyboard: inlineKeyboard }
+    let qrMessage;
+    try {
+      if (qrBase64) {
+        const buffer = Buffer.from(qrBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+        qrMessage = await ctx.replyWithPhoto({ source: buffer }, { caption, parse_mode: "Markdown", reply_markup: { inline_keyboard: inlineKeyboard } });
+      } else if (qrUrl && typeof qrUrl === 'string') {
+        qrMessage = await ctx.replyWithPhoto(qrUrl, { caption, parse_mode: "Markdown", reply_markup: { inline_keyboard: inlineKeyboard } });
+      } else {
+        qrMessage = await ctx.reply(
+          `❇️ *Informasi Deposit Anda (Orkut)* ❇️
+
+🏷️ *» Kode Transaksi:* \`${apiRef}\`
+🏷️ *» Jumlah:* Rp${finalAmount.toLocaleString('id-ID')}
+
+Silahkan selesaikan pembayaran melalui QRIS. Link/QR tidak diberikan oleh API.`,
+          { parse_mode: 'Markdown', reply_markup: { inline_keyboard: inlineKeyboard } }
+        );
       }
-    );
+    } catch (sendErr) {
+      if (typeof logger !== 'undefined') logger.error('Gagal mengirim QR ke user:', sendErr);
+      await ctx.reply("❌ Gagal mengirim QR ke pengguna.");
+      await resetDepositState();
+      return;
+    }
 
-    try { await ctx.deleteMessage(waitMsg.message_id); } catch (_) {}
+    try { if (waitMsg?.message_id) await ctx.deleteMessage(waitMsg.message_id); } catch {}
 
-    // Simpan ke global
-    if (!global.pendingDeposits) global.pendingDeposits = {};
-    global.pendingDeposits[transactionId] = {
-      amount: data.total_amount,
-      originalAmount: data.amount,
-      userId: ctx.from.id,
-      username: ctx.from.username || `user_${ctx.from.id}`,
+    // === Simpan data deposit ke memori & database ===
+    global.pendingDeposits[apiRef] = {
+      amount: finalAmount,
+      originalAmount: amount,
+      userId,
+      username: ctx.from.username || `user_${userId}`,
       timestamp: Date.now(),
-      status: "pending",
+      status: 'pending',
       qrMessageId: qrMessage.message_id,
-      expiredAt: data.expired_at
+      provider: 'Orkut',
+      ref: apiRef
     };
 
-    // Simpan ke DB
-    await insertPendingDeposit(
-      transactionId,
-      ctx.from.id,
-      ctx.from.username || `user_${ctx.from.id}`,
-      data.total_amount,
-      data.amount,
-      qrMessage.message_id
-    );
+    if (typeof insertPendingDeposit === 'function') {
+      await insertPendingDeposit(
+        apiRef,
+        userId,
+        ctx.from.username || `user_${userId}`,
+        finalAmount,
+        amount,
+        qrMessage.message_id
+      );
+    }
+
+    delete global.depositState[userId];
+    if (typeof console !== 'undefined') console.log(`[DEPOSIT-ORKUT] ${userId} berhasil, durasi: ${Date.now() - start}ms`);
 
   } catch (error) {
-    logger.error("❌ Kesalahan saat memproses deposit:", error.stack || error);
+    if (typeof console !== 'undefined') console.error("❌ Kesalahan saat memproses deposit Orkut:", error);
+    await resetDepositState();
     await ctx.reply(
-      "❌ *GAGAL!* Terjadi kesalahan saat memproses pembayaran. Silahkan coba lagi nanti.",
-      { parse_mode: "Markdown" }
+      '❌ *GAGAL!* Terjadi kesalahan saat memproses pembayaran. Silahkan coba lagi nanti.',
+      { parse_mode: 'Markdown' }
     );
   }
 }
 
 
+
+
+function insertPendingDeposit(uniqueCode, userId, username, finalAmount, originalAmount, qrMessageId) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO pending_deposits (unique_code, user_id, username, amount, original_amount, timestamp, status, qr_message_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uniqueCode, userId, username, finalAmount, originalAmount, Date.now(), 'pending', qrMessageId],
+      (err) => {
+        if (err) {
+          logger.error('Gagal insert pending_deposits:', err.message);
+          reject(err);
+        } else {
+          resolve();
+        }
+      }
+    );
+  });
+}
+
+function deletePendingDeposit(uniqueCode) {
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode], (err) => {
+      if (err) {
+        logger.error('Gagal hapus pending_deposits (error):', err.message);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
 async function checkQRISStatus() {
   try {
-    const pendingDeposits = Object.entries(global.pendingDeposits);
-    for (const [transactionId, deposit] of pendingDeposits) {
-      if (deposit.status !== "pending") continue;
+    if (!global.processedTransactions) global.processedTransactions = new Set();
+    const pendingEntries = Object.entries(global.pendingDeposits || {});
 
-      // ✅ Cek expired berdasarkan expiredAt dari API
-      if (new Date() > new Date(deposit.expiredAt)) {
+    // Ambil kredensial dari vars.json / ENV (sama seperti processDeposit)
+    const MERCHANT_ID = (typeof vars !== 'undefined' && (vars.merchantid || vars.MERCHANTID)) || process.env.MERCHANT_ID || process.env.merchantid || '';
+    const API_KEY = (typeof vars !== 'undefined' && (vars.api_key || vars.API_KEY)) || process.env.API_KEY || process.env.api_key || '';
+
+    for (const [uniqueCode, deposit] of pendingEntries) {
+      if (!deposit || deposit.status !== 'pending') continue;
+
+      // Expire lokal 5 menit
+      const depositAge = Date.now() - (deposit.timestamp || 0);
+      if (depositAge > 5 * 60 * 1000) {
         try {
-          if (deposit.qrMessageId) {
-            await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId);
+          if (deposit.qrMessageId && typeof bot !== 'undefined') {
+            await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId).catch(() => {});
           }
-          await bot.telegram.sendMessage(
-            deposit.userId,
-            "❌ *Pembayaran Kedaluwarsa*\n\nSilahkan Top Up lagi untuk mendapatkan QR baru.",
-            { parse_mode: "Markdown" }
-          );
+          if (typeof bot !== 'undefined') {
+            await bot.telegram.sendMessage(deposit.userId,
+              '❌ *Pembayaran Kedaluwarsa*\n\n' +
+              'Waktu pembayaran telah habis. Silahkan klik Top Up lagi untuk mendapatkan QR baru.',
+              { parse_mode: 'Markdown' }
+            );
+          }
         } catch (error) {
-          logger.error("Error saat menghapus pesan expired:", error);
+          if (typeof logger !== 'undefined') logger.error('Error saat menghapus pesan pembayaran yang kedaluwarsa:', error);
         } finally {
-          delete global.pendingDeposits[transactionId];
-          db.run("DELETE FROM pending_deposits WHERE unique_code = ?", [transactionId]);
+          delete global.pendingDeposits[uniqueCode];
+          if (typeof db !== 'undefined') {
+            db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode], (err) => {
+              if (err && typeof logger !== 'undefined') logger.error('Gagal menghapus pending_deposits (kedaluwarsa):', err.message);
+            });
+          }
         }
         continue;
       }
 
-      // 🔥 Cek status pembayaran via API
       try {
-        const res = await axios.get(
-          `https://my-payment.autsc.my.id/api/status/payment?transaction_id=${transactionId}&apikey=${API_KEY}`
-        );
-        const status = res.data;
+        // === Panggil API mutasi baru (POST JSON) ===
+        const mutasiUrl = 'https://qris-ajaib.autsc.my.id/mutasi';
+        const body = { username: MERCHANT_ID, api_key: API_KEY };
 
-        if (status.status === "success" && status.paid === true) {
-          const success = await processMatchingPayment(deposit, status, transactionId);
-          if (success) {
-            logger.info(`Pembayaran sukses: ${transactionId}`);
-            delete global.pendingDeposits[transactionId];
-            db.run("DELETE FROM pending_deposits WHERE unique_code = ?", [transactionId]);
+        if (typeof logger !== 'undefined') {
+          logger.info(`Cek mutasi Orkut: ${mutasiUrl} body=${JSON.stringify({ username: MERCHANT_ID, api_key: '***' })}`);
+        }
+
+        const resp = await axios.post(mutasiUrl, body, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000
+        });
+
+        const payload = resp?.data || {};
+        if (typeof logger !== 'undefined') logger.debug(`Mutasi response: ${JSON.stringify(payload)}`);
+
+        // Terima dua kemungkinan format: {success: true, data: [...]} atau {status:'success', data:[...]}
+        const ok = (payload.success === true) || (String(payload.status).toLowerCase() === 'success');
+        const list = Array.isArray(payload.data) ? payload.data : (Array.isArray(payload) ? payload : []);
+        if (!ok || !Array.isArray(list) || list.length === 0) continue;
+
+        // Cari transaksi yang cocok
+        for (const trx of list) {
+          const amt = Number(trx.amount || trx.nominal || trx.total || trx.jumlah || 0);
+          const reff = String(trx.issuer_reff || trx.issuer_ref || trx.reff || trx.reff_id || trx.transactionId || '');
+          const matchByRef = (deposit.ref && reff) ? (reff === deposit.ref || reff.includes(String(deposit.ref))) : false;
+          const matchByAmount = (amt && amt === Number(deposit.amount));
+
+          if (matchByRef || matchByAmount) {
+            const transactionKey = `${reff || 'no_ref'}_${amt}`;
+            if (global.processedTransactions.has(transactionKey)) {
+              if (typeof logger !== 'undefined') logger.info(`Transaksi ${transactionKey} sudah diproses, skip.`);
+              continue;
+            }
+
+            const success = (typeof processMatchingPayment === 'function')
+              ? await processMatchingPayment(deposit, trx, uniqueCode)
+              : true; // fallback: anggap sukses jika helper tidak ada
+
+            if (success) {
+              global.processedTransactions.add(transactionKey);
+              delete global.pendingDeposits[uniqueCode];
+              if (typeof db !== 'undefined') {
+                db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode], (err) => {
+                  if (err && typeof logger !== 'undefined') logger.error('Gagal menghapus pending_deposits (berhasil):', err.message);
+                });
+              }
+              if (typeof logger !== 'undefined') logger.info(`Pembayaran berhasil diproses untuk ${uniqueCode}`);
+              break;
+            }
           }
         }
       } catch (error) {
-        logger.error(`Error cek status pembayaran ${transactionId}:`, error.message);
+        if (typeof logger !== 'undefined') logger.error(`Error saat memeriksa status pembayaran untuk ${uniqueCode}:`, error.message || error);
       }
     }
   } catch (error) {
-    logger.error("Error di checkQRISStatus:", error);
+    if (typeof logger !== 'undefined') logger.error('Error di checkQRISStatus:', error);
   }
 }
+
 
 function keyboard_abc() {
   const alphabet = 'abcdefghijklmnopqrstuvwxyz';
@@ -5123,60 +5471,62 @@ async function sendTransactionLogToGroup({
     return;
   }
 
-  // Tentukan emoji dan teks status berdasarkan role
-  let statusEmoji = '';
-  let statusText = '';
-  if (userRole === 'admin') {
-    statusEmoji = '👑';
-    statusText = 'Admin';
-  } else if (userRole === 'reseller') {
-    statusEmoji = '🏆';
-    statusText = 'Reseller';
-  } else {
-    statusEmoji = '👤';
-    statusText = 'Member';
-  }
+  // Status by role
+  let statusEmoji = '👤';
+  let statusText = 'Member';
+  if (userRole === 'admin') { statusEmoji = '👑'; statusText = 'Admin'; }
+  else if (userRole === 'reseller') { statusEmoji = '🏆'; statusText = 'Reseller'; }
 
-  // Terapkan sensor pada username akun sebelum ditampilkan
   const censoredAccountUsername = censorAccountUsername(accountUsername);
 
-  const message = `
-<b>━━━━━━━━━━━━━━━━━━</b>
-<b>❇️ Transaksi Berhasil ❇️</b>
-<b>━━━━━━━━━━━━━━━━━━</b>
-📒 <b>» No Trx:</b> #${trxNumber}
-🌀 <b>» Status:</b> ${statusText} ${statusEmoji}
-♂️ <b>» Username:</b> ${tgUsername}
-📋 <b>» ID:</b> <code>${tgUserId}</code>
-🏷️ <b>» Server:</b> ${serverName}
-🏷️ <b>» ISP :</b> ${ispName}
-🏷️ <b>» Domain / IP :</b> <code>${domainName}</code>
-🏷️ <b>» Nama :</b> ${censoredAccountUsername}
-🏷️ <b>» Produk:</b> ${serviceName}
-🏷️ <b>» Limit Quota :</b> ${limitQuota} GB
-🏷️ <b>» Limit Login :</b> ${limitLogin} Hp
-🏷️ <b>» Type:</b> ${trxType}
-🏷️ <b>» Durasi akun:</b> ${activeDays} Hari Rp.${costValue.toLocaleString('id-ID')}
-🏷️ <b>» Harga Normal Perhari:</b> Rp.${hargaNormalPerHari.toLocaleString('id-ID')}
-🏷️ <b>» Saldo di kurangi:</b> Rp.${saldoDikurangi.toLocaleString('id-ID')}
-🏷️ <b>» Saldo saat ini:</b> Rp.${userSaldoNow.toLocaleString('id-ID')}
-🏷️ <b>» Tanggal:</b> ${dateLabel}
-🏷️ <b>» Waktu:</b> ${timeLabel}
-<b>━━━━━━━━━━━━━━━━━━</b>
-`;
+  // Bangun pesan full di dalam fence Markdown (triple backticks harus di-escape dalam template literal)
+  const message = 
+`╭──────────────╮
+   📦 TRANSAKSI BERHASIL 📦
+╰──────────────╯
+
+\`\`\`
+📒 No Trx       : #${trxNumber}
+🌀 Status       : ${statusText} ${statusEmoji}
+👤 Username     : ${tgUsername}
+🆔 ID           : ${tgUserId}
+
+🌐 Server       : ${serverName}
+📡 ISP          : ${ispName}
+🔗 Domain/IP    : ${domainName}
+🙍 Nama         : ${censoredAccountUsername}
+
+📦 Produk       : ${serviceName}
+📊 Limit Quota  : ${limitQuota} GB
+📱 Limit Login  : ${limitLogin} HP
+⚙️ Tipe         : ${trxType}
+⏳ Durasi Akun  : ${activeDays} Hari — Rp.${costValue.toLocaleString('id-ID')}
+💲 Normal/Hari  : Rp.${hargaNormalPerHari.toLocaleString('id-ID')}
+
+💳 Saldo Keluar : Rp.${saldoDikurangi.toLocaleString('id-ID')}
+💰 Saldo Now    : Rp.${userSaldoNow.toLocaleString('id-ID')}
+
+📅 Tanggal      : ${dateLabel}
+⏰ Waktu        : ${timeLabel}
+\`\`\`
+
+━━━━━━━━━━━━━━
+📝 Catatan: Simpan nomor transaksi untuk support
+━━━━━━━━━━━━━━`;
+
 
   try {
     await axios.post(`https://api.telegram.org/bot${groupData.keyGroup}/sendMessage`, {
       chat_id: groupData.chatId,
       text: message,
-      parse_mode: 'HTML'
+      parse_mode: 'MarkdownV2'
     });
-
     logger.info(`✅ Log transaksi #${trxNumber} dikirim ke grup ${groupData.chatId}`);
   } catch (err) {
     logger.error(`❌ Gagal kirim log transaksi ke grup: ${err.response?.data?.description || err.message}`);
   }
 }
+
 // --- AKHIR FUNGSI sendTransactionLogToGroup ---
 
 // --- AKHIR FUNGSI sendTransactionLogToGroup ---
@@ -5313,23 +5663,28 @@ async function sendPaymentSuccessNotificationByUserId(userId, deposit, currentBa
     });
 
     const hasBonus = deposit.bonus && deposit.bonus > 0 && deposit.bonus_percent;
-    const bonusText = hasBonus
-      ? `🎁 Bonus Top Up: *Rp${deposit.bonus}* (${deposit.bonus_percent}%)\n`
+    const bonusLine = hasBonus
+      ? `🎁 Bonus           : Rp${(deposit.bonus || 0).toLocaleString('id-ID')} (${deposit.bonus_percent || 0}%)\n`
       : '';
 
-    const messageText =
-      `━━━━━━━━━━━━━━━━━━\n` +
-      `✅ *Pembayaran Berhasil ✅*\n` +
-      `━━━━━━━━━━━━━━━━━━\n` +
-      `🏷️ *» Username:* \`${username}\`\n` +
-      `🏷️ *» ID Pengguna:* \`${userId}\`\n` +
-      `🏷️ *» Nominal:* Rp ${deposit.amount}\n` +
-      `🏷️ *» Saldo Ditambahkan:* Rp ${deposit.originalAmount}\n` +
-      bonusText +
-      `🏷️ *» Saldo Sekarang:* Rp ${saldo.toLocaleString('id-ID')}`;
+    // ===== Pesan ke USER =====
+    const messageText = 
+`╭──────────────╮
+   📦 TOP UP BERHASIL 📦
+╰──────────────╯
+\`\`\`
+🏷️ Username        : @${username}
+🆔 ID              : ${userId}
+💰 Nominal Top Up  : Rp${deposit.amount.toLocaleString('id-ID')}
+${bonusLine}💳 Saldo Sekarang  : Rp${currentBalance.toLocaleString('id-ID')}
+\`\`\`
+
+━━━━━━━━━━━━━━
+✨ Terima kasih sudah melakukan Top Up ✨
+━━━━━━━━━━━━━━`;
 
     await bot.telegram.sendMessage(userId, messageText, {
-      parse_mode: 'Markdown',
+      parse_mode: 'MarkdownV2',
       reply_markup: {
         inline_keyboard: [
           [
@@ -5349,26 +5704,31 @@ async function sendPaymentSuccessNotificationByUserId(userId, deposit, currentBa
       }
     }
 
-    // Kirim juga ke grup
+    // ===== Pesan ke GRUP =====
     const group = getBotGroupData();
     if (group) {
       const { keyGroup, chatId } = group;
 
-      const messageToGroup =
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `❇️ *Top Up Berhasil* ❇️\n` +
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `🏷️ *» Username:* \`@${username}\`\n` +
-        `🏷️ *» ID:* \`${userId}\`\n` +
-        `🏷️ *» Nominal:* Rp${deposit.amount.toLocaleString('id-ID')}\n` +
-        `🏷️ *» Bonus Top Up:* Rp${(deposit.bonus || 0).toLocaleString('id-ID')} (${deposit.bonus_percent || 0}%)\n` +
-        `🏷️ *» Saldo Sekarang:* Rp${currentBalance.toLocaleString('id-ID')}`;
+      const messageToGroup = 
+`╭──────────────╮
+   📦 TOP UP BERHASIL 📦
+╰──────────────╯
+\`\`\`
+🏷️ Username        : @${username}
+🆔 ID              : ${userId}
+💰 Nominal Top Up  : Rp${deposit.amount.toLocaleString('id-ID')}
+${bonusLine}💳 Saldo Sekarang  : Rp${currentBalance.toLocaleString('id-ID')}
+\`\`\`
+
+━━━━━━━━━━━━━━
+✨ Terima kasih sudah melakukan Top Up ✨
+━━━━━━━━━━━━━━`;
 
       try {
         await axios.post(`https://api.telegram.org/bot${keyGroup}/sendMessage`, {
           chat_id: chatId,
           text: messageToGroup,
-          parse_mode: 'Markdown'
+          parse_mode: 'MarkdownV2'
         });
       } catch (err) {
         const errorMessage = `❗ Gagal kirim ke grup:\n${err.response?.data?.description || err.message}`;
@@ -5376,7 +5736,7 @@ async function sendPaymentSuccessNotificationByUserId(userId, deposit, currentBa
 
         // Kirim error ke user
         await bot.telegram.sendMessage(userId, `⚠️ *Gagal kirim notifikasi ke grup.*\n\n${errorMessage}`, {
-          parse_mode: 'Markdown'
+          parse_mode: 'MarkdownV2'
         });
       }
     }
@@ -5387,6 +5747,7 @@ async function sendPaymentSuccessNotificationByUserId(userId, deposit, currentBa
     return false;
   }
 }
+
 
 // Anda mungkin perlu menyesuaikan fungsi ini sesuai dengan data yang Anda butuhkan
 async function processMatchingPayment(deposit, matchingTransaction, uniqueCode) {
@@ -5489,37 +5850,6 @@ setInterval(async () => {
     logger.error("❌ Gagal cek status QRIS:", err.message);
   }
 }, 5000);
-
-async function kirimFileKeTelegram() {
-  const form = new FormData();
-
-  if (!fs.existsSync(FOLDER_TEMPATDB)) {
-    console.log("❌ File tidak ditemukan:", FOLDER_TEMPATDB);
-    return;
-  }
-
-  form.append("chat_id", ADMIN);
-  form.append("document", fs.createReadStream(FOLDER_TEMPATDB));
-
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
-      method: "POST",
-      body: form,
-    });
-
-    const data = await res.json();
-    if (data.ok) {
-      console.log(`[${new Date().toLocaleTimeString()}] ✅ File terkirim ke Telegram.`);
-    } else {
-      console.error("❌ Gagal mengirim file:", data.description);
-    }
-  } catch (err) {
-    console.error("❌ Error saat mengirim file:", err.message);
-  }
-}
-
-setInterval(kirimFileKeTelegram, 2 * 60 * 60 * 1000);
-
 function resetUserSaldo(userId) {
   return new Promise((resolve, reject) => {
     db.run(
@@ -5809,7 +6139,147 @@ process.on('unhandledRejection', (reason, promise) => {
 app.listen(port)
   .on('listening', () => {
     logger.info(`Express server listening on port ${port}`);
-    bot.launch().then(() => {
+    
+// =======================
+// GLOBAL SAFETY WRAPPERS (Auto-inserted)
+// =======================
+// This section adds global error handlers and automatically wraps bot handlers
+// so the bot will not crash on uncaught errors. It also adds safer wrappers
+// for setInterval/setTimeout and axios to log errors without exiting.
+const util = require('util');
+
+// Wrap async handlers to catch errors and reply gracefully when possible
+function wrapHandler(fnName, fn) {
+  if (!fn) return fn;
+  return async function wrapped(...args) {
+    try {
+      return await fn.apply(this, args);
+    } catch (err) {
+      try {
+        logger.error(`❌ Unhandled error in handler (${fnName}): ${err && (err.stack || err.message)}`);
+      } catch(e) {
+        console.error('Logger failed:', e);
+        console.error(err && (err.stack || err));
+      }
+      // Attempt to notify user if ctx-like object present
+      const maybeCtx = args[0];
+      try {
+        if (maybeCtx && typeof maybeCtx.reply === 'function') {
+          await maybeCtx.reply('⚠️ Terjadi kesalahan internal, silakan coba lagi nanti.');
+        } else if (maybeCtx && maybeCtx.answerCbQuery) {
+          // best-effort for callback queries
+          await maybeCtx.answerCbQuery('⚠️ Terjadi kesalahan internal.');
+        }
+      } catch (e2) {
+        // ignore notification failures
+      }
+      // swallow error to prevent process exit
+      return null;
+    }
+  };
+}
+
+// Monkey-patch Telegraf registration helpers to auto-wrap handlers
+try {
+  const _origCommand = bot.command.bind(bot);
+  bot.command = function (cmd, ...fns) {
+    const wrapped = fns.map(fn => (typeof fn === 'function' ? wrapHandler(`command:${cmd}`, fn) : fn));
+    return _origCommand(cmd, ...wrapped);
+  };
+
+  const _origAction = bot.action.bind(bot);
+  bot.action = function (pattern, ...fns) {
+    const wrapped = fns.map(fn => (typeof fn === 'function' ? wrapHandler(`action:${pattern}`, fn) : fn));
+    return _origAction(pattern, ...wrapped);
+  };
+
+  const _origHears = bot.hears ? bot.hears.bind(bot) : null;
+  if (_origHears) {
+    bot.hears = function (pattern, ...fns) {
+      const wrapped = fns.map(fn => (typeof fn === 'function' ? wrapHandler(`hears:${pattern}`, fn) : fn));
+      return _origHears(pattern, ...wrapped);
+    };
+  }
+
+  const _origOn = bot.on ? bot.on.bind(bot) : null;
+  if (_origOn) {
+    bot.on = function (event, ...fns) {
+      const wrapped = fns.map(fn => (typeof fn === 'function' ? wrapHandler(`on:${event}`, fn) : fn));
+      return _origOn(event, ...wrapped);
+    };
+  }
+} catch (e) {
+  logger.error('❌ Gagal pasang wrapper Telegraf: ' + (e && e.stack || e));
+}
+
+// Safe wrappers for setInterval and setTimeout
+const _setInterval = global.setInterval;
+global.setInterval = function (fn, ms, ...args) {
+  return _setInterval(() => {
+    try {
+      fn(...args);
+    } catch (err) {
+      logger.error('❌ Error di setInterval callback: ' + (err && (err.stack || err.message)));
+    }
+  }, ms);
+};
+const _setTimeout = global.setTimeout;
+global.setTimeout = function (fn, ms, ...args) {
+  return _setTimeout(() => {
+    try {
+      fn(...args);
+    } catch (err) {
+      logger.error('❌ Error di setTimeout callback: ' + (err && (err.stack || err.message)));
+    }
+  }, ms);
+};
+
+// Wrap axios methods to log errors before rethrowing
+if (typeof axios !== 'undefined') {
+  try {
+    const _axiosGet = axios.get.bind(axios);
+    axios.get = async function (...args) {
+      try {
+        return await _axiosGet(...args);
+      } catch (err) {
+        logger.error('❌ Axios.get error: ' + (err && (err.stack || err.message)));
+        throw err;
+      }
+    };
+    const _axiosPost = axios.post.bind(axios);
+    axios.post = async function (...args) {
+      try {
+        return await _axiosPost(...args);
+      } catch (err) {
+        logger.error('❌ Axios.post error: ' + (err && (err.stack || err.message)));
+        throw err;
+      }
+    };
+  } catch (e) {
+    logger.error('❌ Gagal pasang wrapper axios: ' + (e && (e.stack || e)));
+  }
+}
+
+// Global process-level handlers to prevent crashes
+process.on('uncaughtException', (err) => {
+  try {
+    logger.error('🚨 uncaughtException: ' + (err && (err.stack || err.message)));
+  } catch (e) {
+    console.error('uncaughtException logger failed', e);
+    console.error(err && (err.stack || err));
+  }
+});
+process.on('unhandledRejection', (reason, p) => {
+  try {
+    logger.error('🚨 unhandledRejection: ' + (reason && (reason.stack || reason)));
+  } catch (e) {
+    console.error('unhandledRejection logger failed', e);
+    console.error(reason && (reason.stack || reason));
+  }
+});
+
+
+bot.launch().then(() => {
       logger.info("Bot launched");
       // [UPDATE: Menjalankan pengecekan downgrade reseller secara berkala]
       setInterval(() => {
@@ -5823,7 +6293,147 @@ app.listen(port)
   })
   .on('error', (err) => {
     logger.error("Express failed to start:", err.message);
-    bot.launch().catch(err => {
+    
+// =======================
+// GLOBAL SAFETY WRAPPERS (Auto-inserted)
+// =======================
+// This section adds global error handlers and automatically wraps bot handlers
+// so the bot will not crash on uncaught errors. It also adds safer wrappers
+// for setInterval/setTimeout and axios to log errors without exiting.
+const util = require('util');
+
+// Wrap async handlers to catch errors and reply gracefully when possible
+function wrapHandler(fnName, fn) {
+  if (!fn) return fn;
+  return async function wrapped(...args) {
+    try {
+      return await fn.apply(this, args);
+    } catch (err) {
+      try {
+        logger.error(`❌ Unhandled error in handler (${fnName}): ${err && (err.stack || err.message)}`);
+      } catch(e) {
+        console.error('Logger failed:', e);
+        console.error(err && (err.stack || err));
+      }
+      // Attempt to notify user if ctx-like object present
+      const maybeCtx = args[0];
+      try {
+        if (maybeCtx && typeof maybeCtx.reply === 'function') {
+          await maybeCtx.reply('⚠️ Terjadi kesalahan internal, silakan coba lagi nanti.');
+        } else if (maybeCtx && maybeCtx.answerCbQuery) {
+          // best-effort for callback queries
+          await maybeCtx.answerCbQuery('⚠️ Terjadi kesalahan internal.');
+        }
+      } catch (e2) {
+        // ignore notification failures
+      }
+      // swallow error to prevent process exit
+      return null;
+    }
+  };
+}
+
+// Monkey-patch Telegraf registration helpers to auto-wrap handlers
+try {
+  const _origCommand = bot.command.bind(bot);
+  bot.command = function (cmd, ...fns) {
+    const wrapped = fns.map(fn => (typeof fn === 'function' ? wrapHandler(`command:${cmd}`, fn) : fn));
+    return _origCommand(cmd, ...wrapped);
+  };
+
+  const _origAction = bot.action.bind(bot);
+  bot.action = function (pattern, ...fns) {
+    const wrapped = fns.map(fn => (typeof fn === 'function' ? wrapHandler(`action:${pattern}`, fn) : fn));
+    return _origAction(pattern, ...wrapped);
+  };
+
+  const _origHears = bot.hears ? bot.hears.bind(bot) : null;
+  if (_origHears) {
+    bot.hears = function (pattern, ...fns) {
+      const wrapped = fns.map(fn => (typeof fn === 'function' ? wrapHandler(`hears:${pattern}`, fn) : fn));
+      return _origHears(pattern, ...wrapped);
+    };
+  }
+
+  const _origOn = bot.on ? bot.on.bind(bot) : null;
+  if (_origOn) {
+    bot.on = function (event, ...fns) {
+      const wrapped = fns.map(fn => (typeof fn === 'function' ? wrapHandler(`on:${event}`, fn) : fn));
+      return _origOn(event, ...wrapped);
+    };
+  }
+} catch (e) {
+  logger.error('❌ Gagal pasang wrapper Telegraf: ' + (e && e.stack || e));
+}
+
+// Safe wrappers for setInterval and setTimeout
+const _setInterval = global.setInterval;
+global.setInterval = function (fn, ms, ...args) {
+  return _setInterval(() => {
+    try {
+      fn(...args);
+    } catch (err) {
+      logger.error('❌ Error di setInterval callback: ' + (err && (err.stack || err.message)));
+    }
+  }, ms);
+};
+const _setTimeout = global.setTimeout;
+global.setTimeout = function (fn, ms, ...args) {
+  return _setTimeout(() => {
+    try {
+      fn(...args);
+    } catch (err) {
+      logger.error('❌ Error di setTimeout callback: ' + (err && (err.stack || err.message)));
+    }
+  }, ms);
+};
+
+// Wrap axios methods to log errors before rethrowing
+if (typeof axios !== 'undefined') {
+  try {
+    const _axiosGet = axios.get.bind(axios);
+    axios.get = async function (...args) {
+      try {
+        return await _axiosGet(...args);
+      } catch (err) {
+        logger.error('❌ Axios.get error: ' + (err && (err.stack || err.message)));
+        throw err;
+      }
+    };
+    const _axiosPost = axios.post.bind(axios);
+    axios.post = async function (...args) {
+      try {
+        return await _axiosPost(...args);
+      } catch (err) {
+        logger.error('❌ Axios.post error: ' + (err && (err.stack || err.message)));
+        throw err;
+      }
+    };
+  } catch (e) {
+    logger.error('❌ Gagal pasang wrapper axios: ' + (e && (e.stack || e)));
+  }
+}
+
+// Global process-level handlers to prevent crashes
+process.on('uncaughtException', (err) => {
+  try {
+    logger.error('🚨 uncaughtException: ' + (err && (err.stack || err.message)));
+  } catch (e) {
+    console.error('uncaughtException logger failed', e);
+    console.error(err && (err.stack || err));
+  }
+});
+process.on('unhandledRejection', (reason, p) => {
+  try {
+    logger.error('🚨 unhandledRejection: ' + (reason && (reason.stack || reason)));
+  } catch (e) {
+    console.error('unhandledRejection logger failed', e);
+    console.error(reason && (reason.stack || reason));
+  }
+});
+
+
+bot.launch().catch(err => {
       logger.error("Bot fallback launch error:", err.message);
     });
   });
