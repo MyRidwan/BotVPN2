@@ -1,4 +1,5 @@
 const os = require('os');
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
 const { Telegraf, session } = require('telegraf');
@@ -65,7 +66,7 @@ const BOT_TOKEN = vars.BOT_TOKEN;
 const port = vars.PORT || 50123;
 const ADMIN = vars.USER_ID;
 const NAMA_STORE = vars.NAMA_STORE || 'XWANSTORE';
-const DATA_QRIS = vars.DATA_QRIS;
+//const DATA_QRIS = vars.DATA_QRIS;
 const MERCHANT_ID = vars.MERCHANT_ID;
 const API_KEY = vars.API_KEY;
 const groupId = vars.GROUP_CHAT_ID;
@@ -4201,7 +4202,7 @@ bot.action('topup_saldo', async (ctx) => {
 ⚡ *ꜱɪʟᴀʜᴋᴀɴ ᴋᴇᴛɪᴋ ɴᴏᴍɪɴᴀʟ ᴛᴏᴘ-ᴜᴘ*  
 ʏᴀɴɢ ɪɴɢɪɴ ᴀɴᴅᴀ ʙᴀʏᴀʀᴋᴀɴ ᴍᴇʟᴀʟᴜɪ ᴍᴇᴛᴏᴅᴇ Qʀɪꜱ Oʀᴋᴜᴛ.  
 
-💰 ᴍɪɴɪᴍᴀʟ ᴛᴏᴘ-ᴜᴘ: *Rp 100*  
+💰 ᴍɪɴɪᴍᴀʟ ᴛᴏᴘ-ᴜᴘ: *Rp 1000*  
 🧾 ᴄᴏɴᴛᴏʜ: \`10000\`
 
 ━━━━━━━━━━━━━━━━━━━━━━━
@@ -4974,217 +4975,103 @@ db.all('SELECT * FROM pending_deposits WHERE status = "pending"', [], (err, rows
   logger.info('Pending deposit loaded:', Object.keys(global.pendingDeposits).length);
 });
 
-const config = {
-    storeName: NAMA_STORE,
-    auth_username: MERCHANT_ID,
-    auth_token: API_KEY,
-    baseQrString: DATA_QRIS,
-    logoPath: 'logo.png'
-};
+const userSessions = new Map(); // Map untuk melacak sesi per user
+const qrImagePath = path.join(__dirname, 'qrcode.png');
 
-const qris = new QRISGenerator(config, 'theme1');
+// ... (kode pertama kamu tetap sama di atas)
 
 async function processDeposit(ctx, amount) {
-  const currentTime = Date.now();
   const userId = ctx.from.id;
+  const usernamex = vars.MERCHANT_ID;
+  const tokenx = vars.API_KEY;
 
-  // Anti-spam request
-  if (global.depositState?.[userId]) {
-    return ctx.reply("⚠️ Kamu masih punya transaksi deposit yang belum selesai!");
-  }
-
-  if (currentTime - lastRequestTime < requestInterval) {
+  if (userSessions.has(userId)) {
     return ctx.reply(
-      '⚠️ *Terlalu banyak permintaan. Silahkan tunggu sebentar sebelum mencoba lagi.*',
+      '⚠️ *Anda sudah memiliki sesi deposit yang aktif. Silakan selesaikan sesi sebelumnya terlebih dahulu.*',
       { parse_mode: 'Markdown' }
     );
   }
-  lastRequestTime = currentTime;
 
-  // Ambil dari vars.json: merchantid & api_key
-  // (fallback ENV & fleksibel kapitalisasi key)
-  const MERCHANT_ID = (typeof vars !== 'undefined' && (vars.merchantid || vars.MERCHANTID)) || process.env.MERCHANT_ID || process.env.merchantid || '';
-  const API_KEY = (typeof vars !== 'undefined' && (vars.api_key || vars.API_KEY)) || process.env.API_KEY || process.env.api_key || '';
+  userSessions.set(userId, true);
 
-  if (!MERCHANT_ID || !API_KEY) {
-    return ctx.reply('❌ *Konfigurasi Orkut belum lengkap.* Harap isi `merchantid` dan `api_key` di vars.json / ENV.', { parse_mode: 'Markdown' });
-  }
-
-  const finalAmount = (typeof generateRandomAmount === 'function')
-    ? generateRandomAmount(parseInt(amount))
-    : parseInt(amount);
-
-  const localUnique = `user-${userId}-${currentTime}`;
-
-  global.pendingDeposits ??= {};
-  global.depositState ??= {};
-  global.depositState[userId] = true;
-
-  const withTimeout = (promise, ms, message = "Waktu tunggu habis") =>
-    Promise.race([
-      promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
-    ]);
-
-  async function resetDepositState(uniqueKey) {
-    try {
-      delete global.depositState?.[userId];
-      if (uniqueKey) delete global.pendingDeposits?.[uniqueKey];
-      if (typeof deletePendingDeposit === 'function' && uniqueKey) {
-        await deletePendingDeposit(uniqueKey).catch(() => {});
-      }
-    } catch (e) {
-      if (typeof console !== 'undefined') console.error("Gagal reset deposit:", e);
-    }
-  }
-
-  let waitMsg;
-  const start = Date.now();
+  let qrMessage = null;
 
   try {
-    // Pesan loading
-    waitMsg = await ctx.reply("⏳ Mohon menunggu...");
-    let dots = 0;
-    const loading = setInterval(async () => {
-      dots = (dots + 1) % 4;
-      try {
-        await ctx.telegram.editMessageText(
-          ctx.chat.id,
-          waitMsg.message_id,
-          null,
-          "⏳ Mohon menunggu" + ".".repeat(dots)
-        );
-      } catch {
-        clearInterval(loading);
-      }
-    }, 700);
+    // === Panggil API QRIS Ajaib (BAWAAN) ===
+    const apiUrl = `https://qris-ajaib.autsc.my.id/create`;
+    const response = await axios.post(apiUrl, {
+      username: MERCHANT_ID,
+      token: API_KEY,
+      amount: amount // << tidak diubah
+    }, { headers: { 'Content-Type': 'application/json' } });
 
-    // === Panggil API Orkut untuk membuat QRIS ===
-    const createUrl = 'https://qris-ajaib.autsc.my.id/create';
-    // Kirim sesuai permintaan: username = merchantid, api_key = api_key
-    const reqBody = { username: MERCHANT_ID, api_key: API_KEY, amount: finalAmount };
-
-    if (typeof logger !== 'undefined') {
-      logger.info(`Orkut create: ${createUrl} body=${JSON.stringify({ username: MERCHANT_ID, amount: finalAmount, api_key: '***' })}`);
+    if (!response.data.success || !response.data.qris_ajaib?.success) {
+      throw new Error('Gagal membuat transaksi QRIS, periksa API Key atau Merchant ID.');
     }
 
-    const createResp = await withTimeout(
-      axios.post(createUrl, reqBody, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }),
-      20000,
-      "Timeout memanggil API Orkut"
-    );
+    const result = response.data.qris_ajaib.results;
+    const { id, amount: nominal, qrcode_url, status, date, expired, generated_at } = result;
 
-    const data = createResp?.data || {};
-    if (typeof logger !== 'undefined') logger.debug(`Orkut create response: ${JSON.stringify(data)}`);
+    // === Unduh gambar QR (BAWAAN) ===
+    const qrResponse = await axios.get(qrcode_url, { responseType: 'arraybuffer' });
+    fs.writeFileSync(qrImagePath, qrResponse.data);
 
-    if (!data || (!data.success && !data.data)) {
-      clearInterval(loading);
-      await ctx.reply("❌ Gagal membuat QRIS Orkut (struktur respons tidak sesuai).");
-      await resetDepositState();
-      return;
-    }
+    // === Caption (BAWAAN) ===
+    const qrCaption =
+      `💳 *Informasi Deposit QRIS Anda*\n\n` +
+      `🧾 *ID Transaksi:* \`${id}\`\n` +
+      `💰 *Jumlah:* Rp ${Number(nominal).toLocaleString('id-ID')}\n` +
+      `📅 *Tanggal:* ${date}\n` +
+      `⌛ *Kedaluwarsa:* ${expired}\n` +
+      `🕒 *Dibuat:* ${generated_at}\n` +
+      `📡 *Status:* ${status}\n\n` +
+      `🖼 *Silakan scan QR di atas untuk menyelesaikan pembayaran Anda.*`;
 
-    // Ambil field-field yang mungkin ada
-    const qrUrl = data.data?.qr || data.data?.qr_url || data.data?.qrImageUrl || data.data?.qrImage || data.qr || null;
-    const qrBase64 = data.data?.qr_base64 || data.data?.qrBase64 || null;
-    const apiRef = String(
-      data.data?.unique_code ||
-      data.data?.issuer_reff ||
-      data.data?.transactionId ||
-      data.data?.id ||
-      localUnique
-    );
-
-    clearInterval(loading);
-
-    // === Kirim QR ke user ===
-    const caption = [
-      `┏━━━━━━━━━━━━━━━━━━━━━┓`,
-      `          🏷️*ᴅᴇᴛᴀɪʟ ᴘᴇᴍʙᴀʏᴀʀᴀɴ*🏷️`,
-      `┗━━━━━━━━━━━━━━━━━━━━━┛`,
-      ``,
-      `💵 ɴᴏᴍɪɴᴀʟ: *Rp ${finalAmount}*`,
-      `⏳ ʙᴀᴛᴀꜱ ᴡᴀᴋᴛᴜ: *5 ᴍɪɴɪᴛ*`,
-      `⚠️ ᴛʀᴀɴꜱꜰᴇʀ *ʜᴀʀᴜꜱ ꜱᴇꜱᴜᴀɪ ɴᴏᴍɪɴᴀʟ*`,
-      ``,
-      `✅ ᴘᴇᴍʙᴀʏᴀʀᴀɴ ᴏᴛᴏᴍᴀᴛɪꜱ`,
-      `📌 ᴊᴀɴɢᴀɴ ᴛᴜᴛᴜᴘ ʜᴀʟᴀᴍᴀɴ ɪɴɪ`,
-      ``,
-      `┏━━━━━━━━━━━━━━━━━━━━━┓`,
-      `    🌐 ᴅɪᴋᴇʟᴏʟᴀ ᴏʟᴇʜ *ᴀɴꜱᴇɴᴅᴀɴᴛ ɴᴇᴛᴡᴏʀᴋ*`,
-      `┗━━━━━━━━━━━━━━━━━━━━━┛`
-    ].join('\n');
-
+    // ===== Tambahkan tombol "Batal Topup" (gaya kode kedua) =====
+    const uniqueCode = `dep-${userId}-${Date.now()}`;
     const inlineKeyboard = [
-      [
-        { text: "📢 Join Channel", url: `https://t.me/${typeof GROUP_USERNAME !== 'undefined' ? GROUP_USERNAME : 'your_channel'}` }
-      ],
-      [
-        { text: "❌ Batal Topup", callback_data: `batal_topup_${apiRef}` }
-      ]
+      [{ text: "📢 Join Channel", url: `https://t.me/${GROUP_USERNAME}` }],
+      [{ text: "❌ Batal Topup", callback_data: `batal_topup_${uniqueCode}` }]
     ];
 
-    let qrMessage;
-    try {
-      if (qrBase64) {
-        const buffer = Buffer.from(qrBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-        qrMessage = await ctx.replyWithPhoto({ source: buffer }, { caption, parse_mode: "Markdown", reply_markup: { inline_keyboard: inlineKeyboard } });
-      } else if (qrUrl && typeof qrUrl === 'string') {
-        qrMessage = await ctx.replyWithPhoto(qrUrl, { caption, parse_mode: "Markdown", reply_markup: { inline_keyboard: inlineKeyboard } });
-      } else {
-        qrMessage = await ctx.reply(
-          `❇️ *Informasi Deposit Anda (Orkut)* ❇️
+    // Kirim QR + tombol
+    qrMessage = await ctx.replyWithPhoto(
+      { source: qrImagePath },
+      { caption: qrCaption, parse_mode: 'Markdown', reply_markup: { inline_keyboard: inlineKeyboard } }
+    );
 
-🏷️ *» Kode Transaksi:* \`${apiRef}\`
-🏷️ *» Jumlah:* Rp${finalAmount.toLocaleString('id-ID')}
-
-Silahkan selesaikan pembayaran melalui QRIS. Link/QR tidak diberikan oleh API.`,
-          { parse_mode: 'Markdown', reply_markup: { inline_keyboard: inlineKeyboard } }
-        );
-      }
-    } catch (sendErr) {
-      if (typeof logger !== 'undefined') logger.error('Gagal mengirim QR ke user:', sendErr);
-      await ctx.reply("❌ Gagal mengirim QR ke pengguna.");
-      await resetDepositState();
-      return;
-    }
-
-    try { if (waitMsg?.message_id) await ctx.deleteMessage(waitMsg.message_id); } catch {}
-
-    // === Simpan data deposit ke memori & database ===
-    global.pendingDeposits[apiRef] = {
-      amount: finalAmount,
-      originalAmount: amount,
+    // Simpan state agar bisa dibatalkan
+    global.pendingDeposits[uniqueCode] = {
       userId,
-      username: ctx.from.username || `user_${userId}`,
-      timestamp: Date.now(),
-      status: 'pending',
+      chatId: ctx.chat.id,
       qrMessageId: qrMessage.message_id,
-      provider: 'Orkut',
-      ref: apiRef
+      status: 'pending',
+      originalCaption: qrCaption,
+      trxId: id,
+      amount: nominal,
+      timestamp: Date.now()
     };
+    // setelah set global.pendingDeposits[uniqueCode] = { ... };
+await insertPendingDeposit(
+  uniqueCode,
+  userId,
+  ctx.from.username ? `@${ctx.from.username}` : 'Tidak tersedia',
+  Number(nominal),       // amount yang dipakai pencocokan
+  Number(amount),        // original_amount (angka asli input user)
+  qrMessage.message_id   // untuk bisa dihapus nanti
+);
 
-    if (typeof insertPendingDeposit === 'function') {
-      await insertPendingDeposit(
-        apiRef,
-        userId,
-        ctx.from.username || `user_${userId}`,
-        finalAmount,
-        amount,
-        qrMessage.message_id
-      );
-    }
 
-    delete global.depositState[userId];
-    if (typeof console !== 'undefined') console.log(`[DEPOSIT-ORKUT] ${userId} berhasil, durasi: ${Date.now() - start}ms`);
+    console.log(`✅ QRIS berhasil dibuat untuk user ${userId}, nominal Rp ${nominal}`);
+
+    // (BAWAAN) cek status berkala tetap jalan
+    checkQRISStatus(ctx, userId, nominal, id, qrMessage);
 
   } catch (error) {
-    if (typeof console !== 'undefined') console.error("❌ Kesalahan saat memproses deposit Orkut:", error);
-    await resetDepositState();
-    await ctx.reply(
-      '❌ *GAGAL!* Terjadi kesalahan saat memproses pembayaran. Silahkan coba lagi nanti.',
-      { parse_mode: 'Markdown' }
-    );
+    console.error('❌ Kesalahan saat memproses deposit:', error?.message || error);
+    await ctx.reply('❌ *Terjadi kesalahan saat membuat QRIS. Silakan coba lagi nanti.*', { parse_mode: 'Markdown' });
+  } finally {
+    userSessions.delete(userId); // BAWAAN
   }
 }
 
@@ -5300,6 +5187,29 @@ async function checkQRISStatus() {
             const success = (typeof processMatchingPayment === 'function')
               ? await processMatchingPayment(deposit, trx, uniqueCode)
               : true; // fallback: anggap sukses jika helper tidak ada
+              // di dalam if (success) { ... }
+if (success) {
+  global.processedTransactions.add(transactionKey);
+
+  // 🧹 HAPUS PESAN QR
+  if (deposit.qrMessageId && typeof bot !== 'undefined') {
+    try {
+      await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId);
+    } catch (e) {
+      if (typeof logger !== 'undefined') logger.warn(`Gagal hapus pesan QR sukses untuk ${deposit.userId}: ${e.message}`);
+    }
+  }
+
+  delete global.pendingDeposits[uniqueCode];
+  if (typeof db !== 'undefined') {
+    db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode], (err) => {
+      if (err && typeof logger !== 'undefined') logger.error('Gagal menghapus pending_deposits (berhasil):', err.message);
+    });
+  }
+  if (typeof logger !== 'undefined') logger.info(`Pembayaran berhasil diproses untuk ${uniqueCode}`);
+  break;
+}
+
 
             if (success) {
               global.processedTransactions.add(transactionKey);

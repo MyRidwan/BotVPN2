@@ -71,7 +71,7 @@ server_app() {
     clear
     echo -e "${orange}─────────────────────────────────────────${neutral}"
     echo -e "${green}- BOT SELLVPN TELEGRAM MOD BY LITE & XWAN${neutral}"
-    echo -e "${green}- BOT KHUSUS MEMBER YG GA PUNYA ORKUT${neutral}"
+    echo -e "${green}- BOT KHUSUS MEMBER YG GA BISA UPGRADE QRIS ORKUT${neutral}"
     echo -e "${green}- AMBIL APIKEY DI https://t.me/Xwan_Payment_Bot${neutral}"
     echo -e "${orange}─────────────────────────────────────────${neutral}"
 
@@ -87,8 +87,8 @@ server_app() {
 #    read -p "Masukkan DATA QRIS: " dataqris
 #    while [ -z "$dataqris" ]; do read -p "Masukkan DATA QRIS: " dataqris; done
 
-#    read -p "Masukkan MERCHANT ID: " merchantid
-#    while [ -z "$merchantid" ]; do read -p "Masukkan MERCHANT ID: " merchantid; done
+    read -p "Masukkan MERCHANT ID: " merchantid
+    while [ -z "$merchantid" ]; do read -p "Masukkan MERCHANT ID: " merchantid; done
 
     read -p "Masukkan API KEY: " apikey
     while [ -z "$apikey" ]; do read -p "Masukkan API KEY: " apikey; done
@@ -106,8 +106,9 @@ server_app() {
     cat >/root/BotVPN2/.vars.json <<EOF
 {
   "BOT_TOKEN": "$token",
-  "USER_ID": "$adminid,1210833546",
+  "USER_ID": "$adminid",
   "NAMA_STORE": "$namastore",
+  "MERCHANT_ID": "$merchantid",
   "PORT": "50123",
   "API_KEY": "$apikey",
   "GROUP_CHAT_ID": "$chatid_group",
