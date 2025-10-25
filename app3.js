@@ -4980,10 +4980,17 @@ const qrImagePath = path.join(__dirname, 'qrcode.png');
 
 // ... (kode pertama kamu tetap sama di atas)
 
+// =========================
+// processDeposit (versi sinkron dgn app.js)
+// =========================
+// =========================
+// processDeposit (fix: sanitize nominal + simpan original_amount di runtime)
+// =========================
 async function processDeposit(ctx, amount) {
   const userId = ctx.from.id;
-  const usernamex = vars.MERCHANT_ID;
-  const tokenx = vars.API_KEY;
+
+  // Ambil kredensial dari vars / ENV (keduanya didukung)
+ 
 
   if (userSessions.has(userId)) {
     return ctx.reply(
@@ -4994,40 +5001,54 @@ async function processDeposit(ctx, amount) {
 
   userSessions.set(userId, true);
 
-  let qrMessage = null;
+  // helper: normalisasi angka "1.000,00" / "1,000" => 1000
+  const toInt = (v) => {
+    if (v === null || v === undefined) return NaN;
+    const s = String(v).replace(/[^\d]/g, '');
+    return s ? Number(s) : NaN;
+  };
 
+  let qrMessage = null;
   try {
-    // === Panggil API QRIS Ajaib (BAWAAN) ===
-    const apiUrl = `https://qris-ajaib.autsc.my.id/create`;
-    const response = await axios.post(apiUrl, {
+    // === Buat transaksi QR ke provider ===
+    const apiUrl = `https://qris-ajaib.serverlite.cloud/create`;
+    const createBody = {
       username: MERCHANT_ID,
       token: API_KEY,
-      amount: amount // << tidak diubah
-    }, { headers: { 'Content-Type': 'application/json' } });
+      amount: Number(amount)
+    };
 
-    if (!response.data.success || !response.data.qris_ajaib?.success) {
+    const response = await axios.post(apiUrl, createBody, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 20000
+    });
+
+    if (!response?.data?.success || !response?.data?.qris_ajaib?.success) {
       throw new Error('Gagal membuat transaksi QRIS, periksa API Key atau Merchant ID.');
     }
 
     const result = response.data.qris_ajaib.results;
     const { id, amount: nominal, qrcode_url, status, date, expired, generated_at } = result;
 
-    // === Unduh gambar QR (BAWAAN) ===
-    const qrResponse = await axios.get(qrcode_url, { responseType: 'arraybuffer' });
+    // === Sanitize nominal dari provider (FIX UTAMA) ===
+    const sanitizedNominal = toInt(nominal); // <— ini yang dipakai untuk pencocokan
+
+    // === Unduh gambar QR & simpan sementara ===
+    const qrResponse = await axios.get(qrcode_url, { responseType: 'arraybuffer', timeout: 20000 });
     fs.writeFileSync(qrImagePath, qrResponse.data);
 
-    // === Caption (BAWAAN) ===
+    // === Caption ===
     const qrCaption =
       `💳 *Informasi Deposit QRIS Anda*\n\n` +
       `🧾 *ID Transaksi:* \`${id}\`\n` +
-      `💰 *Jumlah:* Rp ${Number(nominal).toLocaleString('id-ID')}\n` +
+      `💰 *Jumlah:* Rp ${toInt(nominal).toLocaleString('id-ID')}\n` + // tampilkan sudah dinormalisasi
       `📅 *Tanggal:* ${date}\n` +
       `⌛ *Kedaluwarsa:* ${expired}\n` +
       `🕒 *Dibuat:* ${generated_at}\n` +
       `📡 *Status:* ${status}\n\n` +
       `🖼 *Silakan scan QR di atas untuk menyelesaikan pembayaran Anda.*`;
 
-    // ===== Tambahkan tombol "Batal Topup" (gaya kode kedua) =====
+    // === Tombol inline ===
     const uniqueCode = `dep-${userId}-${Date.now()}`;
     const inlineKeyboard = [
       [{ text: "📢 Join Channel", url: `https://t.me/${GROUP_USERNAME}` }],
@@ -5040,42 +5061,40 @@ async function processDeposit(ctx, amount) {
       { caption: qrCaption, parse_mode: 'Markdown', reply_markup: { inline_keyboard: inlineKeyboard } }
     );
 
-    // Simpan state agar bisa dibatalkan
+    // Simpan state runtime
     global.pendingDeposits[uniqueCode] = {
       userId,
       chatId: ctx.chat.id,
       qrMessageId: qrMessage.message_id,
       status: 'pending',
       originalCaption: qrCaption,
-      trxId: id,
-      amount: nominal,
+      trxId: id,                          // gunakan sebagai ref tambahan
+      amount: sanitizedNominal,           // <— gunakan nominal yang sudah disanitasi
+      original_amount: toInt(amount),     // <— SIMPAN JUGA nilai asli input user (FIX UTAMA)
       timestamp: Date.now()
     };
-    // setelah set global.pendingDeposits[uniqueCode] = { ... };
-await insertPendingDeposit(
-  uniqueCode,
-  userId,
-  ctx.from.username ? `@${ctx.from.username}` : 'Tidak tersedia',
-  Number(nominal),       // amount yang dipakai pencocokan
-  Number(amount),        // original_amount (angka asli input user)
-  qrMessage.message_id   // untuk bisa dihapus nanti
-);
 
+    // Persist ke DB (untuk pemulihan saat restart)
+    await insertPendingDeposit(
+      uniqueCode,
+      userId,
+      ctx.from.username ? `@${ctx.from.username}` : 'Tidak tersedia',
+      sanitizedNominal,                   // amount untuk pencocokan (sudah bersih)
+      toInt(amount),                      // original_amount (input user) — konsisten bersih
+      qrMessage.message_id
+    );
 
-    console.log(`✅ QRIS berhasil dibuat untuk user ${userId}, nominal Rp ${nominal}`);
+    // Trigger cek satu kali (loop berkala tetap dijalankan di tempat lain bila ada)
+    try { await checkQRISStatus(); } catch (_) {}
 
-    // (BAWAAN) cek status berkala tetap jalan
-    checkQRISStatus(ctx, userId, nominal, id, qrMessage);
-
+    console.log(`✅ QRIS berhasil dibuat untuk user ${userId}, nominal Rp ${sanitizedNominal}`);
   } catch (error) {
     console.error('❌ Kesalahan saat memproses deposit:', error?.message || error);
     await ctx.reply('❌ *Terjadi kesalahan saat membuat QRIS. Silakan coba lagi nanti.*', { parse_mode: 'Markdown' });
   } finally {
-    userSessions.delete(userId); // BAWAAN
+    userSessions.delete(userId);
   }
 }
-
-
 
 
 function insertPendingDeposit(uniqueCode, userId, username, finalAmount, originalAmount, qrMessageId) {
@@ -5109,130 +5128,157 @@ function deletePendingDeposit(uniqueCode) {
   });
 }
 
-async function checkQRISStatus() {
-  try {
-    if (!global.processedTransactions) global.processedTransactions = new Set();
-    const pendingEntries = Object.entries(global.pendingDeposits || {});
+// =========================
+// checkQRISStatus (mirip app.js; polling ke mutasiv1)
+// =========================
+// === Cek status pembayaran QRIS versi final (pakai endpoint mutasi POST) ===
+// =============== checkQRISStatus (versi debug & robust) ===============
+// ==== checkQRISStatus (sinkron dgn processDeposit + logging jelas) ====
+// Helper serbaguna untuk ambil mutasi, coba 3 cara (JSON, form, GET)
+// GANTI fungsi ini:
+// async function checkPaymentPeriodically(ctx, userId, totalAmount, id, qrMessage) { ... }
 
-    // Ambil kredensial dari vars.json / ENV (sama seperti processDeposit)
-    const MERCHANT_ID = (typeof vars !== 'undefined' && (vars.merchantid || vars.MERCHANTID)) || process.env.MERCHANT_ID || process.env.merchantid || '';
-    const API_KEY = (typeof vars !== 'undefined' && (vars.api_key || vars.API_KEY)) || process.env.API_KEY || process.env.api_key || '';
+// Dengan versi di bawah ini:
+async function checkQRISStatus(ctx, userId, totalAmount, id, qrMessage) {
+  const interval = 10 * 1000;       // 10 detik
+  const maxDuration = 10 * 60 * 1000; // 10 menit (fix comment)
+  const startTime = Date.now();
 
-    for (const [uniqueCode, deposit] of pendingEntries) {
-      if (!deposit || deposit.status !== 'pending') continue;
+  let success = false;
+  const username = MERCHANT_ID; // username = merchant id (global)
+  const token    = API_KEY;     // token = apikey (global)
 
-      // Expire lokal 5 menit
-      const depositAge = Date.now() - (deposit.timestamp || 0);
-      if (depositAge > 5 * 60 * 1000) {
-        try {
-          if (deposit.qrMessageId && typeof bot !== 'undefined') {
-            await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId).catch(() => {});
-          }
-          if (typeof bot !== 'undefined') {
-            await bot.telegram.sendMessage(deposit.userId,
-              '❌ *Pembayaran Kedaluwarsa*\n\n' +
-              'Waktu pembayaran telah habis. Silahkan klik Top Up lagi untuk mendapatkan QR baru.',
-              { parse_mode: 'Markdown' }
-            );
-          }
-        } catch (error) {
-          if (typeof logger !== 'undefined') logger.error('Error saat menghapus pesan pembayaran yang kedaluwarsa:', error);
-        } finally {
-          delete global.pendingDeposits[uniqueCode];
-          if (typeof db !== 'undefined') {
-            db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode], (err) => {
-              if (err && typeof logger !== 'undefined') logger.error('Gagal menghapus pending_deposits (kedaluwarsa):', err.message);
-            });
-          }
-        }
-        continue;
-      }
+  const mutasiUrl = 'https://qris-ajaib.serverlite.cloud/mutasi';
 
-      try {
-        // === Panggil API mutasi baru (POST JSON) ===
-        const mutasiUrl = 'https://qris-ajaib.autsc.my.id/mutasi';
-        const body = { username: MERCHANT_ID, api_key: API_KEY };
+  // helper: normalisasi angka
+  const toInt = (v) => {
+    if (v === null || v === undefined) return NaN;
+    const s = String(v).replace(/[^\d]/g, '');
+    return s ? Number(s) : NaN;
+  };
 
-        if (typeof logger !== 'undefined') {
-          logger.info(`Cek mutasi Orkut: ${mutasiUrl} body=${JSON.stringify({ username: MERCHANT_ID, api_key: '***' })}`);
-        }
-
-        const resp = await axios.post(mutasiUrl, body, {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 15000
-        });
-
-        const payload = resp?.data || {};
-        if (typeof logger !== 'undefined') logger.debug(`Mutasi response: ${JSON.stringify(payload)}`);
-
-        // Terima dua kemungkinan format: {success: true, data: [...]} atau {status:'success', data:[...]}
-        const ok = (payload.success === true) || (String(payload.status).toLowerCase() === 'success');
-        const list = Array.isArray(payload.data) ? payload.data : (Array.isArray(payload) ? payload : []);
-        if (!ok || !Array.isArray(list) || list.length === 0) continue;
-
-        // Cari transaksi yang cocok
-        for (const trx of list) {
-          const amt = Number(trx.amount || trx.nominal || trx.total || trx.jumlah || 0);
-          const reff = String(trx.issuer_reff || trx.issuer_ref || trx.reff || trx.reff_id || trx.transactionId || '');
-          const matchByRef = (deposit.ref && reff) ? (reff === deposit.ref || reff.includes(String(deposit.ref))) : false;
-          const matchByAmount = (amt && amt === Number(deposit.amount));
-
-          if (matchByRef || matchByAmount) {
-            const transactionKey = `${reff || 'no_ref'}_${amt}`;
-            if (global.processedTransactions.has(transactionKey)) {
-              if (typeof logger !== 'undefined') logger.info(`Transaksi ${transactionKey} sudah diproses, skip.`);
-              continue;
-            }
-
-            const success = (typeof processMatchingPayment === 'function')
-              ? await processMatchingPayment(deposit, trx, uniqueCode)
-              : true; // fallback: anggap sukses jika helper tidak ada
-              // di dalam if (success) { ... }
-if (success) {
-  global.processedTransactions.add(transactionKey);
-
-  // 🧹 HAPUS PESAN QR
-  if (deposit.qrMessageId && typeof bot !== 'undefined') {
+  // helper: ambil mutasi dengan 3 fallback
+  async function queryMutasi({ username, token }) {
+    // 1) POST JSON
     try {
-      await bot.telegram.deleteMessage(deposit.userId, deposit.qrMessageId);
+      const r1 = await axios.post(mutasiUrl, { username, token }, {
+        headers: { 'Content-Type': 'application/json' }, timeout: 20000
+      });
+      const p1 = r1?.data || {};
+      const ok1 = p1?.success === true || String(p1?.status || '').toLowerCase() === 'success';
+      const list1 = Array.isArray(p1?.data) ? p1.data : (Array.isArray(p1) ? p1 : []);
+      if (ok1 && Array.isArray(list1) && list1.length > 0) {
+        return { ok: true, data: list1, raw: p1, via: 'post-json' };
+      }
+    } catch (_) {}
+
+    // 2) POST form-urlencoded
+    try {
+      const params = new URLSearchParams();
+      params.append('username', username);
+      params.append('token', token);
+      const r2 = await axios.post(mutasiUrl, params.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 20000
+      });
+      const p2 = r2?.data || {};
+      const ok2 = p2?.success === true || String(p2?.status || '').toLowerCase() === 'success';
+      const list2 = Array.isArray(p2?.data) ? p2.data : (Array.isArray(p2) ? p2 : []);
+      if (ok2 && Array.isArray(list2) && list2.length > 0) {
+        return { ok: true, data: list2, raw: p2, via: 'post-form' };
+      }
+    } catch (_) {}
+
+    // 3) GET query string
+    try {
+      const r3 = await axios.get(mutasiUrl, { params: { username, token }, timeout: 20000 });
+      const p3 = r3?.data || {};
+      const ok3 = p3?.success === true || String(p3?.status || '').toLowerCase() === 'success';
+      const list3 = Array.isArray(p3?.data) ? p3.data : (Array.isArray(p3) ? p3 : []);
+      return { ok: ok3, data: Array.isArray(list3) ? list3 : [], raw: p3, via: 'get-query' };
     } catch (e) {
-      if (typeof logger !== 'undefined') logger.warn(`Gagal hapus pesan QR sukses untuk ${deposit.userId}: ${e.message}`);
+      return { ok: false, data: [], raw: { error: e?.message || String(e) }, via: 'get-query' };
     }
   }
 
-  delete global.pendingDeposits[uniqueCode];
-  if (typeof db !== 'undefined') {
-    db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode], (err) => {
-      if (err && typeof logger !== 'undefined') logger.error('Gagal menghapus pending_deposits (berhasil):', err.message);
-    });
-  }
-  if (typeof logger !== 'undefined') logger.info(`Pembayaran berhasil diproses untuk ${uniqueCode}`);
-  break;
-}
+  console.log('⏳ Memulai pengecekan pembayaran setiap 10 detik selama 10 menit...');
 
+  // target pencocokan
+  const targetAmount = toInt(totalAmount);
+  const targetRef    = String(id || '');
+
+  while (Date.now() - startTime < maxDuration && !success) {
+    try {
+      // panggil mutasi (dengan fallback)
+      const res = await queryMutasi({ username, token });
+      const list = Array.isArray(res.data) ? res.data : [];
+
+      console.log(`checkQRISStatus: via=${res.via} ok=${res.ok} items=${list.length}`);
+
+      if (list.length) {
+        for (const trx of list) {
+          // ambil field yang mungkin
+          const amt  = toInt(trx.amount ?? trx.nominal ?? trx.total ?? trx.jumlah);
+          const reff = String(trx.issuer_reff ?? trx.issuer_ref ?? trx.reff ?? trx.reff_id ?? trx.transactionId ?? trx.id ?? '');
+
+          // cocokkan by amount atau by id/ref
+          const byAmount = Number.isFinite(amt) && Number.isFinite(targetAmount) && amt === targetAmount;
+          const byRef    = (targetRef && reff) ? (reff === targetRef || reff.includes(targetRef)) : false;
+
+          const status  = String(trx.status ?? trx.stat ?? '').toLowerCase();
+          const isPaid  = status.includes('sukses') || status.includes('success') || status.includes('paid');
+
+          if ((byAmount || byRef) && isPaid) {
+            console.log(`✅ Transaksi cocok. ref="${reff}" nominal=${amt} status=${status}`);
+
+            // fee bisa kamu atur di sini (0 utk default)
+            const fee = 0;
+
+            // jalankan handler sukses kamu (sudah ada di kode lama)
+            success = await processDepositTransaction(ctx, userId, totalAmount, fee, qrMessage, id);
 
             if (success) {
-              global.processedTransactions.add(transactionKey);
-              delete global.pendingDeposits[uniqueCode];
-              if (typeof db !== 'undefined') {
-                db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode], (err) => {
-                  if (err && typeof logger !== 'undefined') logger.error('Gagal menghapus pending_deposits (berhasil):', err.message);
-                });
-              }
-              if (typeof logger !== 'undefined') logger.info(`Pembayaran berhasil diproses untuk ${uniqueCode}`);
+              try {
+                if (qrMessage?.message_id) {
+                  await ctx.deleteMessage(qrMessage.message_id).catch(() => {});
+                }
+              } catch (_) {}
+              console.log('✅ Transaksi valid diproses. Proses selesai.');
               break;
             }
           }
         }
+      }
+    } catch (error) {
+      console.error('❌ Error saat memeriksa mutasi:', error?.message || error);
+    }
+
+    if (!success) {
+      await new Promise((r) => setTimeout(r, interval));
+    }
+  }
+
+  if (!success) {
+    console.log('⏹️ Pengecekan selesai. Tidak ada transaksi valid ditemukan.');
+
+    const expiredMessage = `
+⚠️ *Pembayaran Kadaluarsa!*
+
+Kami tidak mendeteksi pembayaran untuk transaksi *${id}* dalam waktu 10 menit.
+
+Silakan ulangi proses top-up jika masih ingin melanjutkan.
+    `.trim();
+
+    if (qrMessage) {
+      try {
+        await ctx.deleteMessage(qrMessage.message_id);
       } catch (error) {
-        if (typeof logger !== 'undefined') logger.error(`Error saat memeriksa status pembayaran untuk ${uniqueCode}:`, error.message || error);
+        console.error('❌ Gagal menghapus pesan QRIS:', error.message);
       }
     }
-  } catch (error) {
-    if (typeof logger !== 'undefined') logger.error('Error di checkQRISStatus:', error);
+
+    await ctx.reply(expiredMessage, { parse_mode: 'Markdown' });
   }
 }
-
 
 function keyboard_abc() {
   const alphabet = 'abcdefghijklmnopqrstuvwxyz';
