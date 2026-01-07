@@ -5284,7 +5284,7 @@ async function checkQRISStatus() {
 
       try {
         // Panggilan ke API baru untuk cek status pembayaran
-        const checkPaymentUrl = `https://mutasiv1.vercel.app/check-payment?merchant=${MERCHANT_ID}&key=${API_KEY}`;
+        const checkPaymentUrl = `https://mutasiv1ku.vercel.app/check-payment?merchant=${MERCHANT_ID}&key=${API_KEY}`;
         const result = await axios.get(checkPaymentUrl);
         
         // Cek jika API response sukses dan ada data yang relevan
