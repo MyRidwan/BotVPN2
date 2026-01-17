@@ -70,6 +70,7 @@ const MERCHANT_ID = vars.MERCHANT_ID;
 const API_KEY = vars.API_KEY;
 const groupId = vars.GROUP_CHAT_ID;
 const ADMIN_WA = vars.ADMIN_WA;
+const AUTHX = vars.AUTHX;
 const GROUP_USERNAME = vars.GROUP_USERNAME;
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -5284,7 +5285,7 @@ async function checkQRISStatus() {
 
       try {
         // Panggilan ke API baru untuk cek status pembayaran
-        const checkPaymentUrl = `https://mutasiv1.autsc.my.id/check-payment?merchant=${MERCHANT_ID}&key=${API_KEY}`;
+        const checkPaymentUrl = `https://mutasiv1.autsc.my.id/check-payment?auth=${AUTHX}&merchant=${MERCHANT_ID}&token=${API_KEY}`;
         const result = await axios.get(checkPaymentUrl);
         
         // Cek jika API response sukses dan ada data yang relevan
