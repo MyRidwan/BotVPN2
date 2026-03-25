@@ -66,12 +66,18 @@ const port = vars.PORT || 50123;
 const ADMIN = vars.USER_ID;
 const NAMA_STORE = vars.NAMA_STORE || 'XWANSTORE';
 const DATA_QRIS = vars.DATA_QRIS;
+const DATA_QRIS_GOPAY = vars.DATA_QRIS_GOPAY;
 const MERCHANT_ID = vars.MERCHANT_ID;
 const API_KEY = vars.API_KEY;
 const groupId = vars.GROUP_CHAT_ID;
 const ADMIN_WA = vars.ADMIN_WA;
 const AUTHX = vars.AUTHX;
+const APIKEY = vars.AUTH_PAYMET_GETWAY;    
 const GROUP_USERNAME = vars.GROUP_USERNAME;
+// GOPAY CONFIG (ambil dari app1)
+const GOPAY_API = "https://api-gopay.autoftbot.com/transactions";
+const GOPAY_KEY = vars.GOPAY_KEY;
+const GOPAY_ID = vars.GOPAY_ID;
 
 const bot = new Telegraf(BOT_TOKEN);
 
@@ -1105,7 +1111,88 @@ bot.command('addsaldo', async (ctx) => {
       });
   });
 });
+//gopay
+bot.action('topup_gopay', async (ctx) => {
+  const userId = ctx.from.id;
+  const chatId = ctx.chat.id;
 
+  try {
+    await ctx.answerCbQuery();
+    logger.info(`🔍 User ${userId} memulai proses top-up saldo (QRIS Gopay).`);
+
+    // 🧹 Hapus menu lama
+    if (lastMenus[userId]) {
+      try {
+        await bot.telegram.deleteMessage(chatId, lastMenus[userId]);
+        logger.info(`🧹 Menu lama milik ${userId} berhasil dihapus`);
+        delete lastMenus[userId];
+      } catch (e) {
+        console.warn(`⚠️ Gagal menghapus menu sebelumnya untuk ${userId}:`, e?.message);
+      }
+    }
+
+    // 🧼 Bersihkan state sebelumnya
+    delete userState[chatId];
+    if (global.depositState?.[userId]) {
+      delete global.depositState[userId];
+    }
+
+    // ✅ Set state input nominal
+    if (!global.depositState) global.depositState = {};
+    global.depositState[userId] = {
+      action: 'request_amount_gopay',
+      amount: ''
+    };
+
+    logger.info(`📝 Menunggu input nominal dari user ${userId} untuk QRIS Gopay`);
+
+    // 💬 Kirim instruksi
+    const sent = await ctx.reply(
+`💳━━━━━━━━━━━━━━━━━━━━💳
+        *Qʀɪꜱ Gᴏᴘᴀʏ Tᴏᴘ-ᴜᴘ*
+💳━━━━━━━━━━━━━━━━━━━━💳
+
+⚡ *ꜱɪʟᴀʜᴋᴀɴ ᴋᴇᴛɪᴋ ɴᴏᴍɪɴᴀʟ ᴛᴏᴘ-ᴜᴘ*  
+ʏᴀɴɢ ɪɴɢɪɴ ᴀɴᴅᴀ ʙᴀʏᴀʀᴋᴀɴ ᴍᴇʟᴀʟᴜɪ ᴍᴇᴛᴏᴅᴇ Qʀɪꜱ Gᴏᴘᴀʏ.  
+
+💰 ᴍɪɴɪᴍᴀʟ ᴛᴏᴘ-ᴜᴘ: *Rp 100*  
+🧾 ᴄᴏɴᴛᴏʜ: \`10000\`
+
+━━━━━━━━━━━━━━━━━━━━━━━
+⌛ ᴋᴇᴍᴜᴅɪᴀɴ ᴛᴜɴɢɢᴜ ᴘʀᴏꜱᴇꜱ ᴏᴛᴏᴍᴀᴛɪꜱ.  
+ᴀᴘᴀʙɪʟᴀ ꜱᴀʟᴅᴏ ʙᴇʟᴜᴍ ᴍᴀꜱᴜᴋ,  
+ʜᴜʙᴜɴɢɪ ᴀᴅᴍɪɴ ᴅᴇɴɢᴀɴ ʙᴜᴋᴛɪ ᴛʀᴀɴꜱᴀᴋꜱɪ.  
+━━━━━━━━━━━━━━━━━━━━━━━`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '❌ Batal', callback_data: 'send_main_menu' }]
+          ]
+        }
+      }
+    );
+
+    // ✅ Simpan message_id untuk tracking
+    if (sent?.message_id) {
+      lastMenus[userId] = sent.message_id;
+    }
+
+    return sent;
+
+  } catch (error) {
+    logger.error('❌ Kesalahan saat memulai top-up saldo (QRIS Gopay):', error);
+
+    try {
+      await ctx.reply(
+        '❌ *GAGAL! Terjadi kesalahan saat memproses permintaan Anda. Silahkan coba lagi nanti.*',
+        { parse_mode: 'Markdown' }
+      );
+    } catch (e) {
+      logger.error('Gagal kirim pesan error:', e.message);
+    }
+  }
+});
 // ========================= MENU TOPUP PILIHAN ==========================
 bot.action('menu_topup', async (ctx) => {
   try {
@@ -1142,6 +1229,8 @@ bot.action('menu_topup', async (ctx) => {
       keyboard.push([{ text: "💸 Topup QRIS Orkut", callback_data: "topup_saldo" }]);
     if (config.topup_saweria)
       keyboard.push([{ text: "💸 Topup QRIS Saweria", callback_data: "topup_saweria" }]);
+    if (config.topup_gopay)
+      keyboard.push([{ text: "💸 Topup QRIS Gopay", callback_data: "topup_gopay" }]);
     keyboard.push([{ text: "🔙 Kembali ke Menu Utama", callback_data: "send_main_menu" }]);
 
     // 🧭 Tampilan aman + small caps elegan
@@ -1156,6 +1245,7 @@ bot.action('menu_topup', async (ctx) => {
 ┏━━━━━━━━━━━━━━━━━━━┓
 ┃ 💸 <b>Qʀɪꜱ Oʀᴋᴜᴛ</b> — ᴘʀᴏꜱᴇꜱ ᴀᴜᴛᴏᴍᴀᴛɪꜱ  
 ┃ 💸 <b>Qʀɪꜱ Sᴀᴡᴇʀɪᴀ</b> — ᴠᴇʀɪꜰɪᴋᴀꜱɪ ᴄᴇᴘᴀᴛ  
+┃ 💸 <b>Qʀɪꜱ Gᴏᴘᴀʏ</b> — ᴘʀᴏꜱᴇꜱ ᴄᴇᴘᴀᴛ  
 ┗━━━━━━━━━━━━━━━━━━━┛
 
 📘 <b>ᴛᴀᴛᴀ ᴄᴀʀᴀ ᴛᴏᴘ-ᴜᴘ</b>  
@@ -1786,6 +1876,8 @@ const showSewaScript = await new Promise((resolve) => {
         [{ text: `${config.topup_saldo ? '✅' : '❌'} Topup QRIS Orkut`, callback_data: 'toggle_topup_saldo' }, { text: `${config.topup_saweria ? '✅' : '❌'} Topup QRIS Saweria`, callback_data: 'toggle_topup_saweria' }],
         [{text: `${showTrial ? '✅' : '❌'} Tombol Trial`, callback_data: `toggle_trial_btn_${showTrial ? 'off' : 'on'}`}, {text: `${showSewaScript ? '✅' : '❌'} Tombol Sewa Script`, callback_data: `toggle_sewascript_btn_${showSewaScript ? 'off' : 'on'}`}],
         [{ text: '📈 Hasil Penjualan', callback_data: 'statistik_penjualan' }, { text: '📑 Log Topup', callback_data: 'log_topup' }],
+        [{text: `${config.topup_gopay ? '✅' : '❌'} Topup GoPay`, 
+  callback_data: 'toggle_topup_gopay' }],
         [{ text: '👥 List Reseller', callback_data: 'listreseller' }],
         [{ text: '🔙 Kembali', callback_data: 'send_main_menu' }]
     ];
@@ -1807,7 +1899,7 @@ const showSewaScript = await new Promise((resolve) => {
 ${config.topup_saldo ? '✅' : '❌'} TOPUP ORKUT           ${config.topup_saweria ? '✅' : '❌'} TOPUP SAWERIA
 ${showTrial ? '✅' : '❌'} TOMBOL TRIAL          ${showSewaScript ? '✅' : '❌'} TOMBOL SEWA SCRIPT
 📈 HASIL PENJUALAN     📑 LOG TOPUP
-👥 LIST RESELLER        
+👥 LIST RESELLER       ${config.topup_gopay ? '✅' : '❌'} TOPUP GOPAY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔙 KEMBALI
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1843,6 +1935,22 @@ ${showTrial ? '✅' : '❌'} TOMBOL TRIAL          ${showSewaScript ? '✅' : '�
     if (sent?.message_id && typeof lastMenus !== 'undefined') lastMenus[userId] = sent.message_id;
     return sent;
 }
+bot.action('toggle_topup_gopay', async (ctx) => {
+  await ctx.answerCbQuery();
+
+  const config = loadButtonConfig();
+
+  config.topup_gopay = !config.topup_gopay;
+
+  fs.writeFileSync('./button_config.json', JSON.stringify(config, null, 2));
+
+  await ctx.answerCbQuery(
+    `Topup GoPay ${config.topup_gopay ? 'diaktifkan ✅' : 'dimatikan ❌'}`,
+    { show_alert: true }
+  );
+
+  return sendAdminMenu(ctx);
+});
 bot.action('sewascript_daftar', async (ctx) => {
     try {
         await ctx.deleteMessage();
@@ -2756,7 +2864,11 @@ bot.on('text', async (ctx, next) => {
     console.log(`📩 Input dari ${userId}: ${ctx.message.text}`);
     logger.info(`📩 Input teks dari ${userId}: ${ctx.message.text}`);
 
-    if (global.depositState && (global.depositState[userId]?.action === 'request_amount_saweria' || global.depositState[userId]?.action === 'request_amount_orkut')) {
+    if (global.depositState && (
+  global.depositState[userId]?.action === 'request_amount_saweria' || 
+  global.depositState[userId]?.action === 'request_amount_orkut' ||
+  global.depositState[userId]?.action === 'request_amount_gopay'
+)) {
         const input = ctx.message.text.trim();
         const nominal = parseInt(input.replace(/[^\d]/g, ''), 10);
 
@@ -2786,6 +2898,9 @@ bot.on('text', async (ctx, next) => {
             await processDepositSaweria(ctx, nominal);
         } else if (topupAction === 'request_amount_orkut') {
             await processDeposit(ctx, nominal);
+        }
+        else if (topupAction === 'request_amount_gopay') {
+            await processDepositGopay(ctx, nominal);
         }
         return;
     }
@@ -4294,16 +4409,26 @@ bot.action('topup_saldo', async (ctx) => {
 ʜᴜʙᴜɴɢɪ ᴀᴅᴍɪɴ ᴅᴇɴɢᴀɴ ʙᴜᴋᴛɪ ᴛʀᴀɴꜱᴀᴋꜱɪ.  
 ━━━━━━━━━━━━━━━━━━━━━━━
 `,
-      { parse_mode: 'Markdown' }
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '❌ Batal', callback_data: 'send_main_menu' }]
+          ]
+        }
+      }
     );
 
-    // Simpan ID pesan agar bisa dihapus nantinya
-    if (sent && sent.message_id) {
+    // ✅ Simpan message_id untuk tracking
+    if (sent?.message_id) {
       lastMenus[userId] = sent.message_id;
     }
 
+    return sent;
+
   } catch (error) {
-    logger.error('❌ Kesalahan saat memulai proses top-up saldo (QRIS Orkut):', error);
+    logger.error('❌ Kesalahan saat memulai top-up saldo (QRIS Orkut):', error);
+
     try {
       await ctx.reply(
         '❌ *GAGAL! Terjadi kesalahan saat memproses permintaan Anda. Silahkan coba lagi nanti.*',
@@ -4711,6 +4836,7 @@ bot.on('callback_query', async (ctx) => {
     await sendPaginatedUserSaldo(ctx, page, true);
     return;
   }
+  //gopay merchant
 
   // ===============================
   // 💼 LIST RESELLER
@@ -5067,6 +5193,162 @@ const config = {
 };
 
 const qris = new QRISGenerator(config, 'theme1');
+function generateRandomNumber(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+async function processDepositGopay(ctx, amount) {
+  const currentTime = Date.now();
+  const userId = ctx.from.id;
+  const chatId = ctx.chat.id;
+
+  try {
+    // ✅ Jawab callback hanya jika ada
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery().catch(() => {});
+    }
+
+    // ✅ Validasi amount
+    amount = Number(amount);
+    if (isNaN(amount) || amount < 100) {
+      return ctx.reply('❌ Nominal tidak valid. Minimal Rp 100');
+    }
+
+    // 🧹 Hapus pesan sebelumnya (khusus callback)
+    if (ctx.callbackQuery?.message?.message_id) {
+      try {
+        await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
+      } catch (err) {
+        console.warn("⚠️ Gagal hapus pesan lama:", err?.message);
+      }
+    }
+
+    // 🧼 Bersihkan state
+    delete userState[chatId];
+    if (global.depositState?.[userId]) {
+      delete global.depositState[userId];
+    }
+
+    // ✅ Rate limit per user (bukan global)
+    if (!global.userRequestTime) global.userRequestTime = {};
+
+    const lastTime = global.userRequestTime[userId] || 0;
+
+    if (currentTime - lastTime < requestInterval) {
+      return ctx.reply(
+        '⚠️ *Terlalu banyak permintaan. Silakan tunggu sebentar.*',
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    global.userRequestTime[userId] = currentTime;
+
+    const uniqueCode = `user-${userId}-${Date.now()}`;
+
+    const randomFee = generateRandomNumber(1, 300);
+    const finalAmount = amount + randomFee;
+    const adminFee = randomFee;
+
+    // ===== CALL API =====
+    const { exec } = require('child_process');
+
+    const execP = (cmd) =>
+      new Promise((resolve, reject) => {
+        exec(cmd, { maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
+          if (err) {
+            err.stderr = stderr;
+            return reject(err);
+          }
+          resolve(stdout);
+        });
+      });
+
+    const createCmd =
+      `curl -4 -sS -L --get "https://api.rajaserver.web.id/gopaymerchat/createpayment" ` +
+      `--data-urlencode "apikey=${vars.AUTH_PAYMET_GETWAY}" ` +
+      `--data-urlencode "amount=${finalAmount}" ` +
+      `--data-urlencode "codeqr=${vars.DATA_QRIS_GOPAY}"`;
+
+    const out = await execP(createCmd);
+
+    let get;
+    try {
+      get = JSON.parse(String(out));
+    } catch {
+      throw new Error("Response bukan JSON: " + String(out).slice(0, 200));
+    }
+
+    if (get.status !== 'success') {
+      throw new Error('Gagal create QRIS: ' + JSON.stringify(get));
+    }
+
+    const qrImageUrl = get.result?.imageqris?.url;
+    if (!qrImageUrl) throw new Error('QRIS tidak valid');
+
+    const safeQrUrl = encodeURI(String(qrImageUrl).trim());
+
+    const caption = [
+  `┏━━━━━━━━━━━━━━━━━━━━━┓`,
+  `          🏷️*ᴅᴇᴛᴀɪʟ ᴘᴇᴍʙᴀʏᴀʀᴀɴ*🏷️`,
+  `┗━━━━━━━━━━━━━━━━━━━━━┛`,
+  ``,
+  `💵 ɴᴏᴍɪɴᴀʟ: *Rp ${finalAmount}*`,
+  `⏳ ʙᴀᴛᴀꜱ ᴡᴀᴋᴛᴜ: *5 ᴍᴇɴɪᴛ*`,
+  `⚠️ ᴛʀᴀɴꜱꜰᴇʀ *ʜᴀʀᴜꜱ ꜱᴇꜱᴜᴀɪ ɴᴏᴍɪɴᴀʟ*`,
+  ``,
+  `✅ ᴘᴇᴍʙᴀʏᴀʀᴀɴ ᴏᴛᴏᴍᴀᴛɪꜱ`,
+  `📌 ᴊᴀɴɢᴀɴ ᴛᴜᴛᴜᴘ ʜᴀʟᴀᴍᴀɴ ɪɴɪ`,
+  `🔗 [Buka QRIS](${safeQrUrl})\n\n` +
+  ``,
+  `┏━━━━━━━━━━━━━━━━━━━━━┓`,
+  `    🌐 ᴅɪᴋᴇʟᴏʟᴀ ᴏʟᴇʜ *ᴀɴꜱᴇɴᴅᴀɴᴛ ɴᴇᴛᴡᴏʀᴋ*`,
+  `┗━━━━━━━━━━━━━━━━━━━━━┛`
+].join('\n');
+
+    const qrMessage = await ctx.replyWithPhoto(safeQrUrl, {
+      caption,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '❌ Batal', callback_data: `batal_topup_${uniqueCode}` }]
+        ]
+      }
+    });
+
+    // ✅ Pastikan object ada
+    if (!global.pendingDeposits) global.pendingDeposits = {};
+
+    global.pendingDeposits[uniqueCode] = {
+      amount: finalAmount,
+      originalAmount: amount,
+      userId,
+      status: 'pending',
+      timestamp: Date.now(),
+      qrMessageId: qrMessage.message_id
+    };
+
+    db.run(
+      `INSERT INTO pending_deposits 
+      (unique_code, user_id, amount, original_amount, timestamp, status, qr_message_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        uniqueCode,
+        userId,
+        finalAmount,
+        amount,
+        Date.now(),
+        'pending',
+        qrMessage.message_id
+      ]
+    );
+
+  } catch (error) {
+    console.error('❌ Error GOPAY:', error);
+
+    await ctx.reply('❌ Gagal membuat pembayaran GOPAY.', {
+      parse_mode: 'Markdown'
+    });
+  }
+}
 
 async function processDeposit(ctx, amount) {
   const currentTime = Date.now();
@@ -5253,7 +5535,108 @@ function deletePendingDeposit(uniqueCode) {
     });
   });
 }
+async function checkQRISStatusGopay() {
+  try {
+    const pendingDeposits = Object.entries(global.pendingDeposits);
 
+    const res = await axios.post(
+      GOPAY_API,
+      { merchant_id: GOPAY_ID },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${GOPAY_KEY}`
+        },
+        timeout: 15000
+      }
+    );
+
+    if (!res.data?.data?.transactions) {
+      throw new Error("GOPAY API INVALID");
+    }
+
+    const rawList = res.data.data.transactions;
+    const now = Date.now();
+
+    // ✅ Ambil transaksi 1 jam terakhir
+    const list = rawList.filter(tx => {
+      const txTime = new Date(tx.time).getTime();
+      return now - txTime <= 60 * 60 * 1000;
+    });
+
+    logger.info(`📦 GOPAY trx: ${list.length}`);
+
+    for (const [uniqueCode, deposit] of pendingDeposits) {
+      if (!deposit || deposit.status !== 'pending') continue;
+
+      const depositAge = now - deposit.timestamp;
+
+      // ==========================
+      // ✅ EXPIRED 5 MENIT
+      // ==========================
+      if (depositAge > 5 * 60 * 1000) {
+        logger.info(`⌛ EXPIRED GOPAY | ${uniqueCode}`);
+
+        deposit.status = 'expired';
+
+        try {
+          await bot.telegram.editMessageCaption(
+            deposit.userId,
+            deposit.qrMessageId,
+            null,
+            '❌ *QRIS sudah expired (5 menit)*',
+            { parse_mode: 'Markdown' }
+          );
+        } catch (e) {}
+
+        delete global.pendingDeposits[uniqueCode];
+        db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode]);
+        continue;
+      }
+
+      const target = Number(deposit.amount);
+      logger.info(`🔍 CEK GOPAY | ${uniqueCode} | target=${target}`);
+
+      // ==========================
+      // ✅ MATCH TRANSAKSI
+      // ==========================
+      const found = list.find(tx => {
+        const amountMatch = Math.abs(Number(tx.amount) - target) <= 1;
+        const statusMatch = String(tx.status).toLowerCase() === "settlement";
+
+        return amountMatch && statusMatch;
+      });
+
+      if (!found) {
+        logger.info(`⏳ Pending GOPAY | ${uniqueCode}`);
+        continue;
+      }
+
+      // ==========================
+      // ✅ ANTI DOUBLE PROCESS
+      // ==========================
+      if (deposit.status === 'success') continue;
+
+      logger.info(`💰 MATCH GOPAY | ${uniqueCode}`);
+
+      deposit.status = 'processing';
+
+      const success = await processMatchingPayment(deposit, found, uniqueCode);
+
+      if (success) {
+        deposit.status = 'success';
+
+        delete global.pendingDeposits[uniqueCode];
+        db.run('DELETE FROM pending_deposits WHERE unique_code = ?', [uniqueCode]);
+      } else {
+        deposit.status = 'pending';
+      }
+    }
+
+  } catch (error) {
+    logger.error('❌ ERROR CHECK GOPAY:', error.message);
+  }
+}
 async function checkQRISStatus() {
   try {
     const pendingDeposits = Object.entries(global.pendingDeposits);
@@ -5854,6 +6237,7 @@ setInterval(async () => {
     logger.error("❌ Gagal cek status QRIS:", err.message);
   }
 }, 5000);
+setInterval(checkQRISStatusGopay, 15000); // cek tiap 15 detik
 function resetUserSaldo(userId) {
   return new Promise((resolve, reject) => {
     db.run(
