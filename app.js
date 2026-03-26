@@ -5244,7 +5244,7 @@ async function processDepositGopay(ctx, amount) {
 
     const uniqueCode = `user-${userId}-${Date.now()}`;
 
-    const randomFee = generateRandomNumber(1, 300);
+    const randomFee = generateRandomNumber(1, 100);
     const finalAmount = amount + randomFee;
     const adminFee = randomFee;
 
