@@ -24,7 +24,6 @@ async function trialssh(username, password, exp, iplimit, serverId) {
       const domain = server.domain;
       const auth = server.auth;
       const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
-      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/trialssh?user=${username}&password=${password}&exp=${exp}&iplimit=${iplimit}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
