@@ -1,6 +1,7 @@
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('./sellvpn.db');
+const cloudfront = server.cloudfront || "-";
 
 async function trialssh(username, password, exp, iplimit, serverId) {
   console.log(`Creating SSH account for ${username} with expiry ${exp} days, IP limit ${iplimit}, and password ${password}`);
@@ -33,6 +34,7 @@ async function trialssh(username, password, exp, iplimit, serverId) {
                  *✨SSH ACCOUNT✨*
 ──────────────────────
 *Domain* : \`${sshData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Nameserver*: \`${sshData.ns_domain}\`
 *Username* : \`${sshData.username}\`
 *Password* : \`${sshData.password}\`
@@ -104,6 +106,7 @@ async function trialvmess(username, exp, quota, limitip, serverId) {
 ──────────────────────
 *Username* : \`${vmessData.username}\`
 *Domain* : \`${vmessData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
 *UUID* : \`${vmessData.uuid}\`
@@ -179,6 +182,7 @@ async function trialvless(username, exp, quota, limitip, serverId) {
 ──────────────────────
 *Username* : \`${vlessData.username}\`
 *Domain* : \`${vlessData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
 *UUID* : \`${vlessData.uuid}\`
@@ -251,6 +255,7 @@ async function trialtrojan(username, exp, quota, limitip, serverId) {
 ──────────────────────
 *Username* : \`${trojanData.username}\`
 *Domain* : \`${trojanData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
 *UUID* : \`${trojanData.uuid}\`
@@ -319,6 +324,7 @@ async function trialshadowsocks(username, exp, quota, limitip, serverId) {
 ──────────────────────
 *Username* : \`${shadowsocksData.username}\`
 *Domain* : \`${shadowsocksData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
 *UUID* : \`${shadowsocksData.uuid}\`
@@ -390,6 +396,7 @@ async function createssh(username, password, exp, iplimit, serverId) {
                  *✨SSH ACCOUNT✨*
 ──────────────────────
 *Domain* : \`${sshData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Nameserver*: \`${sshData.ns_domain}\`
 *Username* : \`${sshData.username}\`
 *Password* : \`${sshData.password}\`
@@ -459,6 +466,7 @@ async function createvmess(username, exp, quota, limitip, serverId) {
 ──────────────────────
 *Username* : \`${vmessData.username}\`
 *Domain* : \`${vmessData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
 *UUID* : \`${vmessData.uuid}\`
@@ -532,6 +540,7 @@ async function createvless(username, exp, quota, limitip, serverId) {
 ──────────────────────
 *Username* : \`${vlessData.username}\`
 *Domain* : \`${vlessData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
 *UUID* : \`${vlessData.uuid}\`
@@ -603,6 +612,7 @@ async function createtrojan(username, exp, quota, limitip, serverId) {
 ──────────────────────
 *Username* : \`${trojanData.username}\`
 *Domain* : \`${trojanData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
 *UUID* : \`${trojanData.uuid}\`
@@ -671,6 +681,7 @@ async function createshadowsocks(username, exp, quota, limitip, serverId) {
 ──────────────────────
 *Username* : \`${shadowsocksData.username}\`
 *Domain* : \`${shadowsocksData.domain}\`
+*CloudFront* : \`${cloudfront}\`
 *Port TLS* : \`443,8443\`
 *Port HTTP*: \`80,8080,2086,8880\`
 *UUID* : \`${shadowsocksData.uuid}\`
