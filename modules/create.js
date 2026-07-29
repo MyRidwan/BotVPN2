@@ -30,35 +30,61 @@ async function trialssh(username, password, exp, iplimit, serverId) {
           if (response.data.status === "success") {
             const sshData = response.data.data;
             const msg = `
-──────────────────────           
-                 *✨SSH ACCOUNT✨*
-──────────────────────
-*Domain* : \`${sshData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Nameserver*: \`${sshData.ns_domain}\`
-*Username* : \`${sshData.username}\`
-*Password* : \`${sshData.password}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*OpenSSH* : \`22\`
-*UdpSSH* : \`1-65535\`
-*DNS* : \`53,2222\`
-*Dropbear* : \`109,110\`
-*BadVPN UDP*: \`7300\`
-*Pub Key* : \`${sshData.pubkey}\`
-───────────────────────
-🫧*HTTP CUSTOM*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+      🚀 *ꜱꜱʜ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${sshData.username}\`
+├ 🔑 ᴘᴀꜱꜱᴡᴏʀᴅ : \`${sshData.password}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ  : \`${sshData.expired}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ : \`${sshData.ip_limit}\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ   : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${sshData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🌍 ɴᴀᴍᴇꜱᴇʀᴠᴇʀ  : \`${sshData.ns_domain}\`
+└ 🔑 ᴘᴜʙ ᴋᴇʏ     : \`${sshData.pubkey}\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🔌 *ᴘᴏʀᴛ* 〕
+├ 🔐 ᴛʟꜱ        : \`443,8443\`
+├ 🌐 ʜᴛᴛᴘ       : \`80,8080,2086,8880\`
+├ ⚡ ᴏᴘᴇɴꜱꜱʜ    : \`22\`
+├ 🚀 ᴜᴅᴘꜱꜱʜ      : \`1-65535\`
+├ 🌍 ᴅɴꜱ        : \`53,2222\`
+├ 📡 ᴅʀᴏᴘʙᴇᴀʀ   : \`109,110\`
+└ 🎮 ʙᴀᴅᴠᴘɴ      : \`7300\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📡 *ʜᴛᴛᴘ ᴄᴜꜱᴛᴏᴍ*
+
 \`${sshData.domain}:80@${sshData.username}:${sshData.password}\`
-───────────────────────
-🫧*Payload*: 
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📄 *ᴘᴀʏʟᴏᴀᴅ*
+
 \`GET /cdn-cgi/trace HTTP/1.1[crlf]Host: Bug_Kalian[crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${sshData.domain}:81/ssh-${sshData.username}.txt)
-──────────────────────
-*📅IP Limit*: \`${sshData.ip_limit}\`
-*⏳Expired*: \`${sshData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${sshData.domain}:81/ssh-${sshData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('SSH account created successfully');
               return resolve(msg);
@@ -101,40 +127,66 @@ async function trialvmess(username, exp, quota, limitip, serverId) {
           if (response.data.status === "success") {
             const vmessData = response.data.data;
             const msg = `
-────────────────────── 
-              *✨VMESS ACCOUNT✨*
-──────────────────────
-*Username* : \`${vmessData.username}\`
-*Domain* : \`${vmessData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*UUID* : \`${vmessData.uuid}\`
-*Alter ID* : \`0\`
-*Security* : \`Auto\`
-*Path* : \`/vmess\`
-*Path gRPC*: \`vmess-grpc\`
-──────────────────────
-🫧*URL TLS:*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+     🚀 *ᴠᴍᴇꜱꜱ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${vmessData.username}\`
+├ 🆔 ᴜᴜɪᴅ      : \`${vmessData.uuid}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ   : \`${vmessData.expired}\`
+├ 📦 Qᴜᴏᴛᴀ     : \`${vmessData.quota === '0 GB' ? 'Unlimited' : vmessData.quota}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ  : \`${vmessData.ip_limit === '0' ? 'Unlimited' : vmessData.ip_limit} IP\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ    : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${vmessData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🔐 ᴛʟꜱ ᴘᴏʀᴛ    : \`443,8443\`
+├ 🌍 ʜᴛᴛᴘ ᴘᴏʀᴛ   : \`80,8080,2086,8880\`
+├ 🔒 ꜱᴇᴄᴜʀɪᴛʏ    : \`Auto\`
+├ 📂 ᴘᴀᴛʜ        : \`/vmess\`
+└ 🚀 ɢʀᴘᴄ ᴘᴀᴛʜ   : \`vmess-grpc\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ᴛʟꜱ*
+
 \`\`\`
 ${vmessData.vmess_tls_link}
 \`\`\`
-🫧*URL HTTP:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ʜᴛᴛᴘ*
+
 \`\`\`
 ${vmessData.vmess_nontls_link}
 \`\`\`
-🫧*URL gRPC:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ɢʀᴘᴄ*
+
 \`\`\`
 ${vmessData.vmess_grpc_link}
 \`\`\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${vmessData.domain}:81/vmess-${vmessData.username}.txt)
-──────────────────────
-🚀*Quota*: \`${vmessData.quota === '0 GB' ? 'Unlimited' : vmessData.quota}\`
-🌤*IP Limit*: \`${vmessData.ip_limit === '0' ? 'Unlimited' : vmessData.ip_limit} IP\`
-⏳*Expired*: \`${vmessData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${vmessData.domain}:81/vmess-${vmessData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('VMess account created successfully');
               return resolve(msg);
@@ -177,38 +229,65 @@ async function trialvless(username, exp, quota, limitip, serverId) {
           if (response.data.status === "success") {
             const vlessData = response.data.data;
             const msg = `
-────────────────────── 
-               *✨VLESS ACCOUNT✨*
-──────────────────────
-*Username* : \`${vlessData.username}\`
-*Domain* : \`${vlessData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*UUID* : \`${vlessData.uuid}\`
-*Path* : \`/vless\`
-*Path gRPC*: \`vless-grpc\`
-──────────────────────
-🫧*URL TLS:*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+      🛡 *ᴠʟᴇꜱꜱ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${vlessData.username}\`
+├ 🆔 ᴜᴜɪᴅ      : \`${vlessData.uuid}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ   : \`${vlessData.expired}\`
+├ 📦 Qᴜᴏᴛᴀ     : \`${vlessData.quota === '0 GB' ? 'Unlimited' : vlessData.quota}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ  : \`${vlessData.ip_limit === '0' ? 'Unlimited' : vlessData.ip_limit} IP\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ    : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${vlessData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🔐 ᴛʟꜱ ᴘᴏʀᴛ    : \`443,8443\`
+├ 🌍 ʜᴛᴛᴘ ᴘᴏʀᴛ   : \`80,8080,2086,8880\`
+├ 📂 ᴘᴀᴛʜ        : \`/vless\`
+└ 🚀 ɢʀᴘᴄ ᴘᴀᴛʜ   : \`vless-grpc\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ᴛʟꜱ*
+
 \`\`\`
 ${vlessData.vless_tls_link}
 \`\`\`
-🫧*URL HTTP:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ʜᴛᴛᴘ*
+
 \`\`\`
 ${vlessData.vless_nontls_link}
 \`\`\`
-🫧*URL gRPC:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ɢʀᴘᴄ*
+
 \`\`\`
 ${vlessData.vless_grpc_link}
 \`\`\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${vlessData.domain}:81/vless-${vlessData.username}.txt)
-──────────────────────
-🚀*Quota*: \`${vlessData.quota === '0 GB' ? 'Unlimited' : vlessData.quota}\`
-🌤*IP Limit*: \`${vlessData.ip_limit === '0' ? 'Unlimited' : vlessData.ip_limit} IP\`
-⏳*Expired*: \`${vlessData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${vlessData.domain}:81/vless-${vlessData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('VLESS account created successfully');
               return resolve(msg);
@@ -250,34 +329,57 @@ async function trialtrojan(username, exp, quota, limitip, serverId) {
           if (response.data.status === "success") {
             const trojanData = response.data.data;
             const msg = `
-────────────────────── 
-            *✨TROJAN ACCOUNT✨*
-──────────────────────
-*Username* : \`${trojanData.username}\`
-*Domain* : \`${trojanData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*UUID* : \`${trojanData.uuid}\`
-*Path* : \`/trojan-ws\`
-*Path gRPC*: \`trojan-grpc\`
-──────────────────────
-🫧*URL TLS:*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+     🐎 *ᴛʀᴏᴊᴀɴ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${trojanData.username}\`
+├ 🆔 ᴜᴜɪᴅ      : \`${trojanData.uuid}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ   : \`${trojanData.expired}\`
+├ 📦 Qᴜᴏᴛᴀ     : \`${trojanData.quota === '0 GB' ? 'Unlimited' : trojanData.quota}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ  : \`${trojanData.ip_limit === '0' ? 'Unlimited' : trojanData.ip_limit} IP\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ    : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${trojanData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🔐 ᴛʟꜱ ᴘᴏʀᴛ    : \`443,8443\`
+├ 🌍 ʜᴛᴛᴘ ᴘᴏʀᴛ   : \`80,8080,2086,8880\`
+├ 📂 ᴘᴀᴛʜ        : \`/trojan-ws\`
+└ 🚀 ɢʀᴘᴄ ᴘᴀᴛʜ   : \`trojan-grpc\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ᴛʟꜱ*
+
 \`\`\`
 ${trojanData.trojan_tls_link}
 \`\`\`
-🫧*URL gRPC:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ɢʀᴘᴄ*
+
 \`\`\`
 ${trojanData.trojan_grpc_link}
 \`\`\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${trojanData.domain}:81/trojan-${trojanData.username}.txt)
-──────────────────────
-🚀*Quota*: \`${trojanData.quota === '0 GB' ? 'Unlimited' : trojanData.quota}\`
-🌤*IP Limit*: \`${trojanData.ip_limit === '0' ? 'Unlimited' : trojanData.ip_limit} IP\`
-⏳*Expired*: \`${trojanData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${trojanData.domain}:81/trojan-${trojanData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('Trojan account created successfully');
               return resolve(msg);
@@ -319,38 +421,65 @@ async function trialshadowsocks(username, exp, quota, limitip, serverId) {
           if (response.data.status === "success") {
             const shadowsocksData = response.data.data;
             const msg = `
-────────────────────── 
-      *✨SHADOWSOCKS ACCOUNT✨*
-──────────────────────
-*Username* : \`${shadowsocksData.username}\`
-*Domain* : \`${shadowsocksData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*UUID* : \`${shadowsocksData.uuid}\`
-*Path* : \`/ss-ws\`
-*Path gRPC*: \`ss-grpc\`
-──────────────────────
-🫧*URL TLS:*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+   🔰 *ꜱʜᴀᴅᴏᴡꜱᴏᴄᴋꜱ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${shadowsocksData.username}\`
+├ 🆔 ᴜᴜɪᴅ      : \`${shadowsocksData.uuid}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ   : \`${shadowsocksData.expired}\`
+├ 📦 Qᴜᴏᴛᴀ     : \`${shadowsocksData.quota === '0 GB' ? 'Unlimited' : shadowsocksData.quota}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ  : \`${shadowsocksData.ip_limit === '0' ? 'Unlimited' : shadowsocksData.ip_limit} IP\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ    : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${shadowsocksData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🔐 ᴛʟꜱ ᴘᴏʀᴛ    : \`443,8443\`
+├ 🌍 ʜᴛᴛᴘ ᴘᴏʀᴛ   : \`80,8080,2086,8880\`
+├ 📂 ᴘᴀᴛʜ        : \`/ss-ws\`
+└ 🚀 ɢʀᴘᴄ ᴘᴀᴛʜ   : \`ss-grpc\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ᴛʟꜱ*
+
 \`\`\`
 ${shadowsocksData.ss_link_ws}
 \`\`\`
-🫧*URL HTTP:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ʜᴛᴛᴘ*
+
 \`\`\`
 ${shadowsocksData.ss_link_nontls}
 \`\`\`
-🫧*URL gRPC:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ɢʀᴘᴄ*
+
 \`\`\`
 ${shadowsocksData.ss_link_grpc}
 \`\`\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${shadowsocksData.domain}:81/ss-${shadowsocksData.username}.txt)
-──────────────────────
-🚀*Quota*: \`${shadowsocksData.quota === '0 GB' ? 'Unlimited' : shadowsocksData.quota}\`
-🌤*IP Limit*: \`${shadowsocksData.ip_limit === '0' ? 'Unlimited' : shadowsocksData.ip_limit} IP\`
-⏳*Expired*: \`${shadowsocksData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${shadowsocksData.domain}:81/ss-${shadowsocksData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('Shadowsocks account created successfully');
               return resolve(msg);
@@ -392,35 +521,61 @@ async function createssh(username, password, exp, iplimit, serverId) {
           if (response.data.status === "success") {
             const sshData = response.data.data;
             const msg = `
-──────────────────────           
-                 *✨SSH ACCOUNT✨*
-──────────────────────
-*Domain* : \`${sshData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Nameserver*: \`${sshData.ns_domain}\`
-*Username* : \`${sshData.username}\`
-*Password* : \`${sshData.password}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*OpenSSH* : \`22\`
-*UdpSSH* : \`1-65535\`
-*DNS* : \`53,2222\`
-*Dropbear* : \`109,110\`
-*BadVPN UDP*: \`7300\`
-*Pub Key* : \`${sshData.pubkey}\`
-───────────────────────
-🫧*HTTP CUSTOM*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+      🚀 *ꜱꜱʜ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${sshData.username}\`
+├ 🔑 ᴘᴀꜱꜱᴡᴏʀᴅ : \`${sshData.password}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ  : \`${sshData.expired}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ : \`${sshData.ip_limit}\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ   : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${sshData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🌍 ɴᴀᴍᴇꜱᴇʀᴠᴇʀ  : \`${sshData.ns_domain}\`
+└ 🔑 ᴘᴜʙ ᴋᴇʏ     : \`${sshData.pubkey}\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🔌 *ᴘᴏʀᴛ* 〕
+├ 🔐 ᴛʟꜱ        : \`443,8443\`
+├ 🌐 ʜᴛᴛᴘ       : \`80,8080,2086,8880\`
+├ ⚡ ᴏᴘᴇɴꜱꜱʜ    : \`22\`
+├ 🚀 ᴜᴅᴘꜱꜱʜ      : \`1-65535\`
+├ 🌍 ᴅɴꜱ        : \`53,2222\`
+├ 📡 ᴅʀᴏᴘʙᴇᴀʀ   : \`109,110\`
+└ 🎮 ʙᴀᴅᴠᴘɴ      : \`7300\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📡 *ʜᴛᴛᴘ ᴄᴜꜱᴛᴏᴍ*
+
 \`${sshData.domain}:80@${sshData.username}:${sshData.password}\`
-───────────────────────
-🫧*Payload*: 
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📄 *ᴘᴀʏʟᴏᴀᴅ*
+
 \`GET /cdn-cgi/trace HTTP/1.1[crlf]Host: Bug_Kalian[crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${sshData.domain}:81/ssh-${sshData.username}.txt)
-──────────────────────
-🚀*IP Limit*: \`${sshData.ip_limit}\`
-⏳*Expired*: \`${sshData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${sshData.domain}:81/ssh-${sshData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('SSH account created successfully');
               return resolve(msg);
@@ -461,40 +616,66 @@ async function createvmess(username, exp, quota, limitip, serverId) {
           if (response.data.status === "success") {
             const vmessData = response.data.data;
             const msg = `
-────────────────────── 
-              *✨VMESS ACCOUNT✨*
-──────────────────────
-*Username* : \`${vmessData.username}\`
-*Domain* : \`${vmessData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*UUID* : \`${vmessData.uuid}\`
-*Alter ID* : \`0\`
-*Security* : \`Auto\`
-*Path* : \`/vmess\`
-*Path gRPC*: \`vmess-grpc\`
-──────────────────────
-🫧*URL TLS:*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+     🚀 *ᴠᴍᴇꜱꜱ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${vmessData.username}\`
+├ 🆔 ᴜᴜɪᴅ      : \`${vmessData.uuid}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ   : \`${vmessData.expired}\`
+├ 📦 Qᴜᴏᴛᴀ     : \`${vmessData.quota === '0 GB' ? 'Unlimited' : vmessData.quota}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ  : \`${vmessData.ip_limit === '0' ? 'Unlimited' : vmessData.ip_limit} IP\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ    : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${vmessData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🔐 ᴛʟꜱ ᴘᴏʀᴛ    : \`443,8443\`
+├ 🌍 ʜᴛᴛᴘ ᴘᴏʀᴛ   : \`80,8080,2086,8880\`
+├ 🔒 ꜱᴇᴄᴜʀɪᴛʏ    : \`Auto\`
+├ 📂 ᴘᴀᴛʜ        : \`/vmess\`
+└ 🚀 ɢʀᴘᴄ ᴘᴀᴛʜ   : \`vmess-grpc\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ᴛʟꜱ*
+
 \`\`\`
 ${vmessData.vmess_tls_link}
 \`\`\`
-🫧*URL HTTP:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ʜᴛᴛᴘ*
+
 \`\`\`
 ${vmessData.vmess_nontls_link}
 \`\`\`
-🫧*URL gRPC:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ɢʀᴘᴄ*
+
 \`\`\`
 ${vmessData.vmess_grpc_link}
 \`\`\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${vmessData.domain}:81/vmess-${vmessData.username}.txt)
-──────────────────────
-🚀*Quota*: \`${vmessData.quota === '0 GB' ? 'Unlimited' : vmessData.quota}\`
-🌤*IP Limit*: \`${vmessData.ip_limit === '0' ? 'Unlimited' : vmessData.ip_limit} IP\`
-⏳*Expired*: \`${vmessData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${vmessData.domain}:81/vmess-${vmessData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('VMess account created successfully');
               return resolve(msg);
@@ -535,38 +716,65 @@ async function createvless(username, exp, quota, limitip, serverId) {
           if (response.data.status === "success") {
             const vlessData = response.data.data;
             const msg = `
-────────────────────── 
-               *✨VLESS ACCOUNT✨*
-──────────────────────
-*Username* : \`${vlessData.username}\`
-*Domain* : \`${vlessData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*UUID* : \`${vlessData.uuid}\`
-*Path* : \`/vless\`
-*Path gRPC*: \`vless-grpc\`
-──────────────────────
-🫧*URL TLS:*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+      🛡 *ᴠʟᴇꜱꜱ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${vlessData.username}\`
+├ 🆔 ᴜᴜɪᴅ      : \`${vlessData.uuid}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ   : \`${vlessData.expired}\`
+├ 📦 Qᴜᴏᴛᴀ     : \`${vlessData.quota === '0 GB' ? 'Unlimited' : vlessData.quota}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ  : \`${vlessData.ip_limit === '0' ? 'Unlimited' : vlessData.ip_limit} IP\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ    : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${vlessData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🔐 ᴛʟꜱ ᴘᴏʀᴛ    : \`443,8443\`
+├ 🌍 ʜᴛᴛᴘ ᴘᴏʀᴛ   : \`80,8080,2086,8880\`
+├ 📂 ᴘᴀᴛʜ        : \`/vless\`
+└ 🚀 ɢʀᴘᴄ ᴘᴀᴛʜ   : \`vless-grpc\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ᴛʟꜱ*
+
 \`\`\`
 ${vlessData.vless_tls_link}
 \`\`\`
-🫧*URL HTTP:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ʜᴛᴛᴘ*
+
 \`\`\`
 ${vlessData.vless_nontls_link}
 \`\`\`
-🫧*URL gRPC:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ɢʀᴘᴄ*
+
 \`\`\`
 ${vlessData.vless_grpc_link}
 \`\`\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${vlessData.domain}:81/vless-${vlessData.username}.txt)
-──────────────────────
-🚀*Quota*: \`${vlessData.quota === '0 GB' ? 'Unlimited' : vlessData.quota}\`
-🌤*IP Limit*: \`${vlessData.ip_limit === '0' ? 'Unlimited' : vlessData.ip_limit} IP\`
-⏳*Expired*: \`${vlessData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${vlessData.domain}:81/vless-${vlessData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('VLESS account created successfully');
               return resolve(msg);
@@ -607,34 +815,57 @@ async function createtrojan(username, exp, quota, limitip, serverId) {
           if (response.data.status === "success") {
             const trojanData = response.data.data;
             const msg = `
-────────────────────── 
-            *✨TROJAN ACCOUNT✨*
-──────────────────────
-*Username* : \`${trojanData.username}\`
-*Domain* : \`${trojanData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*UUID* : \`${trojanData.uuid}\`
-*Path* : \`/trojan-ws\`
-*Path gRPC*: \`trojan-grpc\`
-──────────────────────
-🫧*URL TLS:*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+     🐎 *ᴛʀᴏᴊᴀɴ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${trojanData.username}\`
+├ 🆔 ᴜᴜɪᴅ      : \`${trojanData.uuid}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ   : \`${trojanData.expired}\`
+├ 📦 Qᴜᴏᴛᴀ     : \`${trojanData.quota === '0 GB' ? 'Unlimited' : trojanData.quota}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ  : \`${trojanData.ip_limit === '0' ? 'Unlimited' : trojanData.ip_limit} IP\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ    : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${trojanData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🔐 ᴛʟꜱ ᴘᴏʀᴛ    : \`443,8443\`
+├ 🌍 ʜᴛᴛᴘ ᴘᴏʀᴛ   : \`80,8080,2086,8880\`
+├ 📂 ᴘᴀᴛʜ        : \`/trojan-ws\`
+└ 🚀 ɢʀᴘᴄ ᴘᴀᴛʜ   : \`trojan-grpc\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ᴛʟꜱ*
+
 \`\`\`
 ${trojanData.trojan_tls_link}
 \`\`\`
-🫧*URL gRPC:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ɢʀᴘᴄ*
+
 \`\`\`
 ${trojanData.trojan_grpc_link}
 \`\`\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${trojanData.domain}:81/trojan-${trojanData.username}.txt)
-──────────────────────
-🚀*Quota*: \`${trojanData.quota === '0 GB' ? 'Unlimited' : trojanData.quota}\`
-🌤*IP Limit*: \`${trojanData.ip_limit === '0' ? 'Unlimited' : trojanData.ip_limit} IP\`
-⏳*Expired*: \`${trojanData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${trojanData.domain}:81/trojan-${trojanData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('Trojan account created successfully');
               return resolve(msg);
@@ -676,38 +907,65 @@ async function createshadowsocks(username, exp, quota, limitip, serverId) {
           if (response.data.status === "success") {
             const shadowsocksData = response.data.data;
             const msg = `
-────────────────────── 
-      *✨SHADOWSOCKS ACCOUNT✨*
-──────────────────────
-*Username* : \`${shadowsocksData.username}\`
-*Domain* : \`${shadowsocksData.domain}\`
-*CloudFront* : \`${cloudfront}\`
-*Port TLS* : \`443,8443\`
-*Port HTTP*: \`80,8080,2086,8880\`
-*UUID* : \`${shadowsocksData.uuid}\`
-*Path* : \`/ss-ws\`
-*Path gRPC*: \`ss-grpc\`
-──────────────────────
-🫧*URL TLS:*
+╭━━━━━━━━━━━━━━━━━━━━━━╮
+   🔰 *ꜱʜᴀᴅᴏᴡꜱᴏᴄᴋꜱ ᴀᴄᴄᴏᴜɴᴛ*
+╰━━━━━━━━━━━━━━━━━━━━━━╯
+
+┌〔 📄 *ᴀᴄᴄᴏᴜɴᴛ ɪɴꜰᴏ* 〕
+├ 👤 ᴜꜱᴇʀɴᴀᴍᴇ : \`${shadowsocksData.username}\`
+├ 🆔 ᴜᴜɪᴅ      : \`${shadowsocksData.uuid}\`
+├ 📅 ᴇxᴘɪʀᴇᴅ   : \`${shadowsocksData.expired}\`
+├ 📦 Qᴜᴏᴛᴀ     : \`${shadowsocksData.quota === '0 GB' ? 'Unlimited' : shadowsocksData.quota}\`
+├ 🌐 ɪᴘ ʟɪᴍɪᴛ  : \`${shadowsocksData.ip_limit === '0' ? 'Unlimited' : shadowsocksData.ip_limit} IP\`
+└ 🟢 ꜱᴛᴀᴛᴜꜱ    : \`ACTIVE\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
+├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${shadowsocksData.domain}\`
+├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
+├ 🔐 ᴛʟꜱ ᴘᴏʀᴛ    : \`443,8443\`
+├ 🌍 ʜᴛᴛᴘ ᴘᴏʀᴛ   : \`80,8080,2086,8880\`
+├ 📂 ᴘᴀᴛʜ        : \`/ss-ws\`
+└ 🚀 ɢʀᴘᴄ ᴘᴀᴛʜ   : \`ss-grpc\`
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ᴛʟꜱ*
+
 \`\`\`
 ${shadowsocksData.ss_link_ws}
 \`\`\`
-🫧*URL HTTP:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ʜᴛᴛᴘ*
+
 \`\`\`
 ${shadowsocksData.ss_link_nontls}
 \`\`\`
-🫧*URL gRPC:*
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *ᴜʀʟ ɢʀᴘᴄ*
+
 \`\`\`
 ${shadowsocksData.ss_link_grpc}
 \`\`\`
-──────────────────────
-🫧*Save Account*: [Click Link](https://${shadowsocksData.domain}:81/ss-${shadowsocksData.username}.txt)
-──────────────────────
-🚀*Quota*: \`${shadowsocksData.quota === '0 GB' ? 'Unlimited' : shadowsocksData.quota}\`
-🌤*IP Limit*: \`${shadowsocksData.ip_limit === '0' ? 'Unlimited' : shadowsocksData.ip_limit} IP\`
-⏳*Expired*: \`${shadowsocksData.expired}\`
-──────────────────────
-✨ Selamat menggunakan layanan kami! ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💾 *ꜱᴀᴠᴇ ᴀᴄᴄᴏᴜɴᴛ*
+
+https://${shadowsocksData.domain}:81/ss-${shadowsocksData.username}.txt
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 *ᴀᴄᴄᴏᴜɴᴛ ʙᴇʀʜᴀꜱɪʟ ᴅɪʙᴜᴀᴛ*
+
+🤝 ᴛᴇʀɪᴍᴀ ᴋᴀꜱɪʜ
+ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
+ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('Shadowsocks account created successfully');
               return resolve(msg);
