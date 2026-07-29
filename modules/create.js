@@ -1,7 +1,7 @@
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('./sellvpn.db');
-const cloudfront = server.cloudfront || "-";
+
 
 async function trialssh(username, password, exp, iplimit, serverId) {
   console.log(`Creating SSH account for ${username} with expiry ${exp} days, IP limit ${iplimit}, and password ${password}`);
@@ -23,6 +23,8 @@ async function trialssh(username, password, exp, iplimit, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/trialssh?user=${username}&password=${password}&exp=${exp}&iplimit=${iplimit}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -120,6 +122,7 @@ async function trialvmess(username, exp, quota, limitip, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/trialvmess?user=${username}&exp=${exp}&quota=${quota}&iplimit=${limitip}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -222,6 +225,7 @@ async function trialvless(username, exp, quota, limitip, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/trialvless?user=${username}&exp=${exp}&quota=${quota}&iplimit=${limitip}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -322,6 +326,7 @@ async function trialtrojan(username, exp, quota, limitip, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/trialtrojan?user=${username}&exp=${exp}&quota=${quota}&iplimit=${limitip}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -414,6 +419,7 @@ async function trialshadowsocks(username, exp, quota, limitip, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/trialshadowsocks?user=${username}&exp=${exp}&quota=${quota}&iplimit=${limitip}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -514,6 +520,7 @@ async function createssh(username, password, exp, iplimit, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/createssh?user=${username}&password=${password}&exp=${exp}&iplimit=${iplimit}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -609,6 +616,7 @@ async function createvmess(username, exp, quota, limitip, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/createvmess?user=${username}&exp=${exp}&quota=${quota}&iplimit=${limitip}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -709,6 +717,7 @@ async function createvless(username, exp, quota, limitip, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/createvless?user=${username}&exp=${exp}&quota=${quota}&iplimit=${limitip}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -808,6 +817,7 @@ async function createtrojan(username, exp, quota, limitip, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/createtrojan?user=${username}&exp=${exp}&quota=${quota}&iplimit=${limitip}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
@@ -900,6 +910,7 @@ async function createshadowsocks(username, exp, quota, limitip, serverId) {
 
       const domain = server.domain;
       const auth = server.auth;
+      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
       const param = `:5888/createshadowsocks?user=${username}&exp=${exp}&quota=${quota}&iplimit=${limitip}&auth=${auth}`;
       const url = `http://${domain}${param}`;
       axios.get(url)
