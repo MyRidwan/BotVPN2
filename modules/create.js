@@ -5,31 +5,44 @@ const db = new sqlite3.Database('./sellvpn.db');
 
 async function trialssh(username, password, exp, iplimit, serverId) {
   console.log(`Creating SSH account for ${username} with expiry ${exp} days, IP limit ${iplimit}, and password ${password}`);
-  
+
   // Validasi username
   if (/\s/.test(username) || /[^a-zA-Z0-9]/.test(username)) {
-    return '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.';
+    return {
+      success: false,
+      message: '❌ Username tidak valid. Mohon gunakan hanya huruf dan angka tanpa spasi.'
+    };
   }
 
-  // Ambil domain dari database
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     db.get('SELECT * FROM Server WHERE id = ?', [serverId], (err, server) => {
       if (err) {
         console.error('Error fetching server:', err.message);
-        return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
+        return resolve({
+          success: false,
+          message: '❌ Gagal: Server tidak ditemukan. Silakan coba lagi.'
+        });
       }
 
-      if (!server) return resolve('❌ Gagal: Server tidak ditemukan. Silakan coba lagi.');
+      if (!server) {
+        return resolve({
+          success: false,
+          message: '❌ Gagal: Server tidak ditemukan. Silakan coba lagi.'
+        });
+      }
 
       const domain = server.domain;
       const auth = server.auth;
-      const cloudfront = server.cloudfront || "-"; // <-- pindah ke sini
+      const cloudfront = server.cloudfront || "-";
+
       const param = `:5888/trialssh?user=${username}&password=${password}&exp=${exp}&iplimit=${iplimit}&auth=${auth}`;
       const url = `http://${domain}${param}`;
+
       axios.get(url)
         .then(response => {
           if (response.data.status === "success") {
             const sshData = response.data.data;
+
             const msg = `
 ╭━━━━━━━━━━━━━━━━━━━━━━╮
       🚀 *ꜱꜱʜ ᴀᴄᴄᴏᴜɴᴛ*
@@ -87,16 +100,39 @@ https://${sshData.domain}:81/ssh-${sshData.username}.txt
 ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
 ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
-              console.log('SSH account created successfully');
-              return resolve(msg);
-            } else {
-              console.log('Error creating SSH account');
-              return resolve(`❌ Gagal: ${response.data.message}`);
-            }
-          })
+
+            console.log('SSH account created successfully');
+
+            return resolve({
+              success: true,
+              message: msg,
+              config: {
+                username: sshData.username,
+                password: sshData.password,
+                domain: sshData.domain,
+                cloudfront: cloudfront,
+                ns_domain: sshData.ns_domain,
+                pubkey: sshData.pubkey,
+                expired: sshData.expired
+              }
+            });
+
+          } else {
+            console.log('Error creating SSH account');
+
+            return resolve({
+              success: false,
+              message: `❌ Gagal: ${response.data.message}`
+            });
+          }
+        })
         .catch(error => {
           console.error('Error saat membuat SSH:', error);
-          return resolve('❌ Gagal membuat SSH. Silakan coba lagi nanti.');
+
+          return resolve({
+            success: false,
+            message: '❌ Gagal membuat SSH. Silakan coba lagi nanti.'
+          });
         });
     });
   });
@@ -190,19 +226,32 @@ https://${vmessData.domain}:81/vmess-${vmessData.username}.txt
 ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
 ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
-              console.log('VMess account created successfully');
-              return resolve(msg);
-            } else {
-              console.log('Error creating VMess account');
-              return resolve(`❌ Gagal: ${response.data.message}`);
-            }
-          })
-        .catch(error => {
-          console.error('Error saat membuat VMess:', error);
-          return resolve('❌ Gagal membuat VMess. Silakan coba lagi nanti.');
-        });
-    });
-  });
+console.log('VMess account created successfully');
+
+return resolve({
+  message: msg,
+  config: {
+    tls: vmessData.vmess_tls_link,
+    http: vmessData.vmess_nontls_link,
+    grpc: vmessData.vmess_grpc_link
+  }
+});
+
+} else {
+  console.log('Error creating VMess account');
+  return resolve(`❌ Gagal: ${response.data.message}`);
+}
+
+})
+.catch(error => {
+  console.error('Error saat membuat VMess:', error);
+  return resolve('❌ Gagal membuat VMess. Silakan coba lagi nanti.');
+});
+
+});
+
+});
+
 }
 async function trialvless(username, exp, quota, limitip, serverId) {
   console.log(`Creating VLESS account for ${username} with expiry ${exp} days, quota ${quota} GB, limit IP ${limitip} on server ${serverId}`);
@@ -293,7 +342,14 @@ https://${vlessData.domain}:81/vless-${vlessData.username}.txt
 ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('VLESS account created successfully');
-              return resolve(msg);
+              return resolve({
+    message: msg,
+    config: {
+        tls: vlessData.vless_tls_link,
+        http: vlessData.vless_nontls_link,
+        grpc: vlessData.vless_grpc_link
+    }
+});
             } else {
               console.log('Error creating VLESS account');
               return resolve(`❌ Gagal: ${response.data.message}`);
@@ -386,7 +442,13 @@ https://${trojanData.domain}:81/trojan-${trojanData.username}.txt
 ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('Trojan account created successfully');
-              return resolve(msg);
+              return resolve({
+    message: msg,
+    config: {
+        tls: trojanData.trojan_tls_link,
+        grpc: trojanData.trojan_grpc_link
+    }
+});
             } else {
               console.log('Error creating Trojan account');
               return resolve(`❌ Gagal: ${response.data.message}`);
@@ -684,19 +746,32 @@ https://${vmessData.domain}:81/vmess-${vmessData.username}.txt
 ꜱᴇʟᴀᴍᴀᴛ ᴍᴇɴɢɢᴜɴᴀᴋᴀɴ
 ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
-              console.log('VMess account created successfully');
-              return resolve(msg);
-            } else {
-              console.log('Error creating VMess account');
-              return resolve(`❌ Gagal: ${response.data.message}`);
-            }
-          })
-        .catch(error => {
-          console.error('Error saat membuat VMess:', error);
-          return resolve('❌ Gagal membuat VMess. Silakan coba lagi nanti.');
-        });
-    });
-  });
+console.log('VMess account created successfully');
+
+return resolve({
+  message: msg,
+  config: {
+    tls: vmessData.vmess_tls_link,
+    http: vmessData.vmess_nontls_link,
+    grpc: vmessData.vmess_grpc_link
+  }
+});
+
+} else {
+  console.log('Error creating VMess account');
+  return resolve(`❌ Gagal: ${response.data.message}`);
+}
+
+})
+.catch(error => {
+  console.error('Error saat membuat VMess:', error);
+  return resolve('❌ Gagal membuat VMess. Silakan coba lagi nanti.');
+});
+
+});
+
+});
+
 }
 async function createvless(username, exp, quota, limitip, serverId) {
   console.log(`Creating VLESS account for ${username} with expiry ${exp} days, quota ${quota} GB, limit IP ${limitip} on server ${serverId}`);
@@ -785,7 +860,14 @@ https://${vlessData.domain}:81/vless-${vlessData.username}.txt
 ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('VLESS account created successfully');
-              return resolve(msg);
+              return resolve({
+    message: msg,
+    config: {
+        tls: vlessData.vless_tls_link,
+        http: vlessData.vless_nontls_link,
+        grpc: vlessData.vless_grpc_link
+    }
+});
             } else {
               console.log('Error creating VLESS account');
               return resolve(`❌ Gagal: ${response.data.message}`);
@@ -877,7 +959,13 @@ https://${trojanData.domain}:81/trojan-${trojanData.username}.txt
 ʟᴀʏᴀɴᴀɴ ᴋᴀᴍɪ. ❤️
 `;
               console.log('Trojan account created successfully');
-              return resolve(msg);
+              return resolve({
+    message: msg,
+    config: {
+        tls: trojanData.trojan_tls_link,
+        grpc: trojanData.trojan_grpc_link
+    }
+});
             } else {
               console.log('Error creating Trojan account');
               return resolve(`❌ Gagal: ${response.data.message}`);
