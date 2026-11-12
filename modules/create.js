@@ -60,8 +60,8 @@ async function trialssh(username, password, exp, iplimit, serverId) {
 ┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
 ├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${sshData.domain}\`
 ├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
-├ 🌍 ɴᴀᴍᴇꜱᴇʀᴠᴇʀ  : \`${sshData.ns_domain}\`
-└ 🔑 ᴘᴜʙ ᴋᴇʏ     : \`${sshData.pubkey}\`
+├ 🌍 ɴᴀᴍᴇꜱᴇʀᴠᴇʀ  : \`${sshData.ns_domain || '-'}\`
+└ 🔑 ᴘᴜʙ ᴋᴇʏ     : \`${sshData.pubkey || '-'}\`
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -605,8 +605,8 @@ async function createssh(username, password, exp, iplimit, serverId) {
 ┌〔 🌍 *ꜱᴇʀᴠᴇʀ* 〕
 ├ 🌐 ᴅᴏᴍᴀɪɴ      : \`${sshData.domain}\`
 ├ ☁️ ᴄʟᴏᴜᴅꜰʀᴏɴᴛ  : \`${cloudfront}\`
-├ 🌍 ɴᴀᴍᴇꜱᴇʀᴠᴇʀ  : \`${sshData.ns_domain}\`
-└ 🔑 ᴘᴜʙ ᴋᴇʏ     : \`${sshData.pubkey}\`
+├ 🌍 ɴᴀᴍᴇꜱᴇʀᴠᴇʀ  : \`${sshData.ns_domain || '-'}\`
+└ 🔑 ᴘᴜʙ ᴋᴇʏ     : \`${sshData.pubkey || '-'}\`
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
